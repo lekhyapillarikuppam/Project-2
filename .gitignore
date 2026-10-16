@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# Env
+.env
+.env.local
+
+# Backend runtime data
+backend/storage/
+backend/models/
+
+# Test documents (copyrighted / large) — labels are committed, documents are not
+testset/docs/
+testset/output/
+
+# Audio
+*.mp3
+*.wav
+*.onnx
+*.onnx.json
+!frontend/public/sample/**/*.mp3
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json

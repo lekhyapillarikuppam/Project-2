@@ -1,0 +1,52 @@
+{
+  "01_novel.pdf": {
+    "expect": "accept",
+    "chapters": ["FILL IN: Chapter 1 title", "FILL IN: Chapter 2 title"],
+    "notes": ""
+  },
+  "02_lecture_notes.pdf": {
+    "expect": "accept",
+    "chapters": [],
+    "notes": ""
+  },
+  "03_textbook_chapter.pdf": {
+    "expect": "accept",
+    "chapters": [],
+    "notes": ""
+  },
+  "04_with_outline.pdf": {
+    "expect": "accept",
+    "chapters": [],
+    "notes": ""
+  },
+  "05_styles.docx": {
+    "expect": "accept",
+    "chapters": [],
+    "notes": ""
+  },
+  "06_no_styles.docx": {
+    "expect": "accept",
+    "chapters": [],
+    "notes": ""
+  },
+  "07_messy.pdf": {
+    "expect": "accept",
+    "chapters": [],
+    "notes": ""
+  },
+  "08_scanned.pdf": {
+    "expect": "SCANNED_PDF",
+    "chapters": [],
+    "notes": ""
+  },
+  "09_legacy.doc": {
+    "expect": "LEGACY_DOC",
+    "chapters": [],
+    "notes": ""
+  },
+  "10_fake.pdf": {
+    "expect": "UNSUPPORTED_TYPE",
+    "chapters": [],
+    "notes": ""
+  }
+}
