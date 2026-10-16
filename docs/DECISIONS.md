@@ -21,6 +21,14 @@ Locked decisions. Changing any of these needs an explicit new entry below, not a
 | D15 | Development on Windows + VS Code (PowerShell), repo at `C:\dev\Project2` | User's setup |
 | D16 | Chapter detection is evaluated against a hand-labeled test set (precision / recall / F1) | Measurable result for the viva |
 | D17 | Started fresh on 2026-10-16; nothing reused from the earlier Project 2 attempt | User decision |
+| D18 | Jobs are not restored after a restart; startup empties `storage/jobs/`. Unknown and expired jobs both show "no longer available" | Render free tier wipes disk and memory on sleep/redeploy anyway |
+| D19 | The UI never promises 24 h; it says audio is temporary and to download what you want to keep. A free uptime monitor keeps the backend awake (Phase 5) | Honest about free-tier behaviour |
+| D20 | Heavy work runs in one job worker thread with its own event loop; blocking steps via `asyncio.to_thread`; ffmpeg via `subprocess.run` only | Keeps the API responsive; avoids the Windows asyncio subprocess problem |
+| D21 | Only chapters under 40 words are merged; short real sections stay as chapters. References/Bibliography/Index are dropped | Listening is fine with short chapters; nobody wants references read aloud |
+| D22 | Sample audiobook is static files in `frontend/public/sample/`, served by Vercel | Plays instantly even when the backend is asleep |
+| D23 | `react-router-dom` is an approved frontend dependency, with a `vercel.json` rewrite | Needed for `/book/:jobId` deep links |
+| D24 | Python dependencies are pinned to exact versions (`==`) from Phase 0 onward | edge-tts and piper-tts change their interfaces between versions |
 
 ## Change log
 - 2026-10-16 — Initial decisions recorded (Phase 0).
+- 2026-10-16 — D18–D24 added after the Phase 0 review; SPEC revision 2.

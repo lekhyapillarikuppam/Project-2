@@ -20,11 +20,16 @@ The documents themselves go in `testset/docs/` (gitignored). Only `labels.json` 
 
 Keep each document under 200 pages. Prefer variety over size.
 
+> A ready-made set of all 10 files (built from public-domain books and original content) was provided as `testset_docs.zip`. Unzip it into the repo root. You can still swap in or add real documents (an 11th file of your own long course notes is a good addition) as long as you label them.
+
 ## Labels
 
 `labels.json` holds, for every file:
 - `expect`: `"accept"` or an error code from SPEC §12
 - `chapters`: the chapter titles you would expect a human to pick, in order (empty for rejected files)
+- `optional`: titles that may or may not be detected without counting for or against the detector (e.g. a front-matter `Introduction`)
 - `notes`: anything unusual
+
+Matching rules (normalization, fuzzy threshold, one-to-one matching) are in SPEC §13.
 
 Label by looking at the document yourself — **don't** copy the detector's output. Label at the level a listener would want to navigate (usually chapters, or top-level numbered sections for notes).

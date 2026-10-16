@@ -1,7 +1,7 @@
 # AI-Powered Audiobook Generator — Specification (v1)
 
 Course: UMC301 Applied Data Science and Artificial Intelligence — Project 2
-Status: Phase 0 (spec). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
+Status: Phase 0 (spec), revision 2 (2026-10-16, after the Phase 0 review). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
 
 ---
 
@@ -14,7 +14,7 @@ No accounts. Generated audio is temporary.
 ## 2. Goals and non-goals
 
 ### Goals (v1)
-- Accept `.pdf` and `.docx` up to 200 pages.
+- Accept `.pdf` (up to 200 pages) and `.docx` (up to 100,000 words).
 - Produce clean narration: no page numbers, running headers/footers, broken hyphenation, or stray captions read aloud.
 - Split the document into chapters/sections that match the document's real structure.
 - Let the user start listening to chapter 1 while later chapters are still generating.
@@ -40,7 +40,7 @@ No accounts. Generated audio is temporary.
 4. User is taken to `/book/{job_id}` → progress view: overall bar, per-chapter status, ETA.
 5. As soon as chapter 1 is ready, its play button turns on. Chapters become playable one by one.
 6. When all chapters finish, **Download full book** appears.
-7. A notice shows when the audio expires (24 h).
+7. A notice tells the user the audio is temporary: download anything they want to keep. It is deleted after 24 h at most, and may disappear earlier if the free server restarts.
 
 ## 4. Limits
 
@@ -51,8 +51,8 @@ No accounts. Generated audio is temporary.
 | Max PDF pages | 200 | server |
 | Max words (both formats) | 100,000 | server (this is the effective DOCX "page" cap) |
 | Concurrent jobs being processed | 1 | server |
-| Max queued jobs | 3 (further uploads get `SERVER_BUSY`) | server |
-| Audio retention | 24 h after job creation | server cleanup task |
+| Max waiting jobs (not counting the running one) | 3, so at most 4 jobs exist in the active pipeline; the next upload gets `SERVER_BUSY` | server |
+| Audio retention | at most 24 h after job creation (earlier if the server restarts, see §10) | server cleanup task |
 
 All values live in config (`.env`), not hard-coded.
 
@@ -79,29 +79,40 @@ All values live in config (`.env`), not hard-coded.
    └── full.mp3           (built lazily on first full download)
 ```
 
-The backend runs **one uvicorn worker** because the job registry is in memory. `job.json` is also written to disk after every state change so the state is inspectable and survives a reload during local development.
+The backend runs **one uvicorn worker** because the job registry is in memory. `job.json` is written to disk after every state change so the state is inspectable while debugging; it is **not** used to restore jobs after a restart (see §10).
+
+**Threading model.** All heavy work runs off the request loop so `/api/health` and job polling stay responsive:
+- One dedicated **job worker thread** takes jobs from a FIFO queue, one at a time.
+- Inside that thread the job runs in its own asyncio event loop (`asyncio.run(run_job(job))`), so the async edge-tts calls work there.
+- CPU-bound or blocking steps (PyMuPDF/python-docx extraction, Piper synthesis, every ffmpeg/ffprobe call) are run with `await asyncio.to_thread(...)` from that loop.
+- ffmpeg/ffprobe are always called with `subprocess.run([...], check=True)` inside a thread, **never** `asyncio.create_subprocess_exec` (it fails on Windows under `uvicorn --reload`).
+- The job registry is a dict guarded by a `threading.Lock`; API handlers only read snapshots of it.
 
 ## 6. Processing pipeline
 
 ### 6.1 Validation (`pipeline/validate.py`)
 In order, stop at first failure:
-1. Extension is `.pdf` or `.docx` (`.doc` → `LEGACY_DOC`, anything else → `UNSUPPORTED_TYPE`).
-2. File signature matches the extension (PDF starts with `%PDF`; DOCX is a ZIP containing `word/document.xml`). Mismatch → `UNSUPPORTED_TYPE`.
-3. Size ≤ max → else `FILE_TOO_LARGE`.
+1. Size: if the request's `Content-Length` exceeds the max, reject with `FILE_TOO_LARGE` before reading the body. The body is then streamed to disk in 1 MB pieces and the upload is aborted with `FILE_TOO_LARGE` as soon as it passes the max (in case `Content-Length` was missing or wrong).
+2. Extension is `.pdf` or `.docx` (`.doc` → `LEGACY_DOC`, anything else → `UNSUPPORTED_TYPE`).
+3. File signature matches the extension (PDF starts with `%PDF`; DOCX is a ZIP containing `word/document.xml`). Mismatch → `UNSUPPORTED_TYPE`.
 4. Opens without error → else `CORRUPT_FILE`.
 5. PDF not encrypted / password-protected → else `ENCRYPTED_FILE`.
 6. PDF page count ≤ 200 → else `TOO_MANY_PAGES`.
-7. Scanned check (PDF): count pages with fewer than 30 extractable characters. If more than 50% of pages are like this → `SCANNED_PDF`. If some (but ≤ 50%) are, skip those pages and add a warning to the job.
+7. Scanned check (PDF): a page is **image-only** if it has fewer than 30 extractable characters **and** contains at least one image. A page with fewer than 30 characters and no image is **blank** (divider pages, intentionally blank pages) and is skipped silently. If more than 50% of the non-blank pages are image-only → `SCANNED_PDF`. If some (but ≤ 50%) are, skip them and add the warning "N image-only pages were skipped".
 8. After extraction: total words ≤ 100,000 → else `TOO_MANY_WORDS`; total words ≥ 20 → else `EMPTY_DOCUMENT`.
 
 ### 6.2 Extraction
-- **PDF** (`pipeline/extract_pdf.py`, PyMuPDF): `page.get_text("dict")` to get blocks → lines → spans with text, font size, bold flag, and bounding box. Also read the built-in outline via `doc.get_toc()`.
+- **PDF** (`pipeline/extract_pdf.py`, PyMuPDF, imported as `pymupdf`): `page.get_text("dict", sort=False)` to get blocks → lines → spans with text, font size, bold flag, and bounding box. Also read the built-in outline via `doc.get_toc()`.
+- **Reading order (multi-column pages)**: do **not** use `sort=True` (it interleaves columns). Per page:
+  1. A block is *full-width* if its width is > 60% of the text area width; otherwise it is *left* if its centre is left of the page's centre line, else *right*.
+  2. The page is two-column if at least 3 blocks are left, at least 3 are right, and left+right blocks hold ≥ 50% of the page's characters. Otherwise sort all blocks by `(y0, x0)`.
+  3. For a two-column page, full-width blocks split the page into horizontal bands. Within each band, output all left blocks sorted by `y0`, then all right blocks sorted by `y0`. Bands are output top to bottom.
 - **DOCX** (`pipeline/extract_docx.py`, python-docx): iterate paragraphs in body order, keeping style name (`Heading 1`, `Title`, …), run-level bold, and font size. Tables are skipped. Footnotes/endnotes are not in the body and are ignored.
 
 Both extractors produce the same intermediate form: an ordered list of **lines/paragraphs** with `text`, `font_size`, `bold`, `page` (PDF only), `bbox` (PDF only), `style` (DOCX only).
 
 ### 6.3 Cleaning (`pipeline/clean.py`)
-1. **Running headers/footers and page numbers**: text in the top ~8% or bottom ~8% of a page that repeats (after stripping digits) on ≥ 30% of pages is removed. Lines that are only a number or roman numeral or "Page N"/"N of M" are removed.
+1. **Running headers/footers and page numbers**: a line in the top ~8% or bottom ~8% of a page is a running header/footer if its text (lowercased, digits and roman numerals stripped) appears in that same zone on **at least max(3, 30% of pages)** pages. Alternating left/right headers count separately, so each must meet the threshold on its own. Running headers/footers are removed. Lines in those zones that are only a number, a roman numeral, "Page N" or "N of M" are always removed, even in short documents. Documents with fewer than 3 pages therefore only lose page-number lines.
 2. **Hyphenation**: a line ending in `-` followed by a line starting with a lowercase letter is joined without the hyphen.
 3. **Line merging**: consecutive lines of the same block and same font size are merged into one paragraph; a paragraph break is kept when there is a vertical gap, indentation change, or the previous line ends with terminal punctuation and is noticeably shorter than the column width.
 4. **Normalization of characters**: ligatures (ﬁ, ﬂ), smart quotes kept but normalized, non-breaking spaces, soft hyphens, repeated whitespace.
@@ -122,12 +133,15 @@ Produces an ordered list of chapters, each with a title and paragraphs. Strategi
 4. **Text patterns**: lines matching `^(chapter|part|book|section|unit|lecture)\s+([0-9]+|[ivxlcdm]+|one|two|…)\b` or numbered headings like `^\d+(\.\d+)?\s+[A-Z]`.
 5. **Fallback**: no structure found → split into `Part 1`, `Part 2`, … of roughly 3,000 words each, at paragraph boundaries.
 
-Post-processing:
-- Text before the first chapter (title page, preface without a heading) becomes a chapter titled `Introduction` if it has ≥ 150 words; otherwise it is dropped.
-- Table of contents pages inside the body (many short lines ending in page numbers) are removed.
-- Chapters with < 150 words are merged into the next chapter.
-- Chapters with > 12,000 words are split at sub-headings or paragraph boundaries into `Title (Part 1)`, `Title (Part 2)`, ….
-- The strategy used is recorded in `document.json` (`structure_source`).
+**Heading text.** When a heading line is only a chapter label (matches the pattern in strategy 4 with nothing after the number, e.g. `Chapter I`, `CHAPTER 3`, `Part Two`) and the next line is also heading-like (larger or bold, short), the two lines are combined into one title: `Chapter I: Down the Rabbit-Hole`. A chapter label with no title line after it stays as is (`Chapter XII`). Numbered headings keep their number (`2 Eigenvalues and Eigenvectors`).
+
+Post-processing, applied **in this order**:
+1. **Remove table-of-contents pages**: a page where ≥ 50% of the lines end with a page number or dot leaders, or that is headed `Contents` / `Table of Contents`, is dropped.
+2. **Drop back matter**: a chapter titled (case-insensitive, ignoring numbering) `References`, `Bibliography`, `Works Cited`, `Index`, or `Acknowledgements`/`Acknowledgments` is dropped entirely.
+3. **Front matter**: text before the first chapter (title page, author line, abstract, preface without a heading) becomes a chapter titled `Introduction` if it has ≥ 150 words; otherwise it is dropped. If the first real chapter is itself titled `Introduction`, the front matter chapter is titled `Front Matter` instead.
+4. **Merge tiny chapters**: a chapter with fewer than **40** words (e.g. a part-title page `Part One` with nothing under it) is merged into the **next** chapter, and the next chapter's title is kept. If the tiny chapter is the last one, it is merged into the previous chapter, keeping the previous title. Real sections with a heading and a short body are **not** merged; short chapters are fine for listening.
+5. **Split huge chapters**: chapters with > 12,000 words are split at sub-headings if any exist, otherwise at paragraph boundaries, into parts of roughly equal length titled `Title (Part 1)`, `Title (Part 2)`, ….
+6. Number the chapters 1..N and record the strategy used in `document.json` (`structure_source`).
 
 ### 6.5 Text normalization for speech (`tts/normalize.py`)
 Applied per segment before synthesis:
@@ -140,17 +154,27 @@ Applied per segment before synthesis:
 Split each paragraph into sentences, then pack sentences into chunks of ≤ 1,500 characters without breaking a sentence (a single over-long sentence is split at `;`, `,` or spaces). Each chunk remembers which paragraph it belongs to so pauses can be inserted.
 
 ### 6.7 Synthesis (`tts/`)
-- Interface: `TTSEngine.synthesize(text: str, voice: str) -> bytes` (MP3, 24 kHz, mono, 48 kbps).
+- Interface (async, file-based so audio never sits in memory):
+  ```python
+  class TTSEngine(Protocol):
+      name: str                      # "edge" | "piper"
+      async def synthesize(self, text: str, out_path: Path, voice: str | None = None) -> None: ...
+  ```
+  Output is always MP3, 24 kHz, mono, 48 kbps. `voice` is an engine-specific voice id; `None` means the engine's configured narrator voice (`EDGE_VOICE` for edge, the configured model for Piper). Piper ignores voices it does not have and uses its narrator voice. v2 passes per-character voice ids.
+- Piper's synthesis is blocking, so `PiperEngine.synthesize` runs Piper and the ffmpeg re-encode via `asyncio.to_thread`.
 - **EdgeTTSEngine** (primary): `edge-tts` library, narrator voice from config.
 - **PiperEngine** (fallback): local Piper model (`en_US-lessac-medium`), WAV output re-encoded with ffmpeg to the same MP3 format.
-- Per chunk: try edge-tts up to 3 times with exponential backoff (1 s, 2 s, 4 s); if it still fails, use Piper for that chunk. If edge-tts fails 5 times in a row within a job, switch the rest of the job to Piper.
-- Concurrency: up to 4 chunks in flight at once (config), chapters processed **in order** so chapter 1 is ready first.
+- Per chunk: try edge-tts up to 3 times with exponential backoff (1 s, 2 s, 4 s); if it still fails, use Piper for that chunk.
+- Switching the whole job to Piper: a counter of **consecutive chunk failures** is kept per job (a chunk counts as failed when all 3 edge-tts attempts failed). It is updated in the order chunks **finish**, under a lock; any successful edge-tts chunk resets it to 0. When it reaches 5, every remaining chunk in the job uses Piper directly.
+- Concurrency: chapters are processed strictly **one at a time, in order**. Within the current chapter up to 4 chunks are synthesized at once (config); chunks from different chapters never overlap. A chapter is marked `ready` only after its MP3 is assembled.
+- Piper on the free Render CPU is much slower than edge-tts. It is a safety net, not the normal path; the ETA shown to the user will reflect the slowdown automatically.
 
 ### 6.8 Assembly (`tts/assemble.py`)
 - All audio uses the same MP3 parameters, so files can be joined with the ffmpeg concat demuxer and `-c copy` (no re-encoding).
+- The concat list file uses absolute paths written with forward slashes, each single-quoted with any `'` escaped as `'\''`, and ffmpeg is run with `-f concat -safe 0`. This works with Windows paths that contain backslashes or spaces.
 - Pre-generated silence clips in the same format: 400 ms between paragraphs, 1,000 ms after the chapter title, 2,000 ms between chapters in the full book.
 - Each chapter file starts with the narrator reading the chapter title.
-- Chapter duration is measured with ffprobe and stored.
+- Chapter duration = the sum of the durations of its parts (each chunk and silence clip measured with ffprobe before joining). After joining, ffprobe also reads the joined file; if the two differ by more than 1 s, a warning is logged and the summed value is used. This avoids wrong durations from MP3 header information copied from the first part.
 - `full.mp3` is built on the first full-book download request (after all chapters are ready) and cached in the job folder.
 
 ## 7. Data model
@@ -219,8 +243,9 @@ ETA = remaining characters ÷ observed characters-per-second over the job so far
 queued → extracting → synthesizing → done
                 │            └──────→ partial   (some chapters failed even after fallback)
                 └──→ failed          (validation/extraction error, or every chapter failed)
-done | partial | failed → expired (after 24 h; files deleted, job kept as a stub for 1 more hour so the UI can say "expired")
+done | partial | failed → expired (after 24 h; files deleted, job kept as a stub for 1 more hour so the API can return JOB_EXPIRED)
 ```
+- **Restarts**: jobs are not restored after a server restart. On startup the whole `storage/jobs/` folder is emptied, and any unknown `job_id` returns `JOB_NOT_FOUND`. The frontend treats `JOB_NOT_FOUND` and `JOB_EXPIRED` the same way: "This audiobook is no longer available (audio is temporary). Please upload the document again." 
 - Upload-time validation errors (§6.1 steps 1–7) are returned directly from `POST /api/upload` with HTTP 4xx and **no job is created**.
 - Errors found after the job starts (e.g. `TOO_MANY_WORDS`, `EMPTY_DOCUMENT`) set `status = failed` with `error` filled.
 
@@ -240,22 +265,39 @@ Base path `/api`. All errors use one shape:
 | GET | `/api/jobs/{job_id}/chapters/{n}/audio` | stream chapter MP3 for the player; must support HTTP `Range` so seeking works | `200/206 audio/mpeg` |
 | GET | `/api/jobs/{job_id}/download/{n}` | chapter MP3 as attachment, filename `{book}_{nn}_{title}.mp3` | `200` |
 | GET | `/api/jobs/{job_id}/download/full` | full-book MP3 as attachment (only when `done`/`partial`) | `200` |
-| GET | `/sample/…` | static pre-generated sample audiobook (job-shaped JSON + MP3s) | `200` |
 
-HTTP status mapping: validation errors `400`/`413`/`415`/`422`; `SERVER_BUSY` `503`; unknown job `404`; expired job `410`; chapter not ready `409`.
+The pre-generated sample audiobook is **not** served by the backend; it is static files in the frontend (see §11).
+
+Download filenames: `{book}_{nn}_{title}.mp3` (chapter) and `{book}.mp3` (full book), where `book` is the upload's filename without its extension. Both parts are sanitised: characters invalid on Windows (`< > : " / \ | ? *` and control characters) are removed, whitespace runs become `_`, and each part is cut to 60 characters. The `Content-Disposition` header carries an ASCII-only `filename="…"` (non-ASCII replaced by `_`) plus `filename*=UTF-8''…` with the full percent-encoded name.
+
+HTTP status for each error code:
+
+| Code | HTTP |
+|---|---|
+| `UNSUPPORTED_TYPE`, `LEGACY_DOC` | 415 |
+| `FILE_TOO_LARGE` | 413 |
+| `TOO_MANY_PAGES`, `CORRUPT_FILE`, `ENCRYPTED_FILE`, `SCANNED_PDF` | 422 |
+| missing `file` field in the upload | 400 |
+| `SERVER_BUSY` | 503 |
+| `JOB_NOT_FOUND` | 404 |
+| `JOB_EXPIRED` | 410 |
+| `CHAPTER_NOT_READY` | 409 |
+| `TOO_MANY_WORDS`, `EMPTY_DOCUMENT`, `TTS_FAILED` | not HTTP errors: they appear in the job object (`status: failed`, `error: {...}`) or on a chapter (`status: failed`) |
 
 ## 10. Storage and cleanup
 - Root: `storage/jobs/` (path from config). Gitignored.
-- A background task runs every 10 minutes and deletes job folders past `expires_at`.
-- On startup, folders older than the retention period are deleted.
-- On Render, the disk is wiped on every redeploy/restart anyway; this is acceptable because audio is temporary by design.
+- A background task runs every 10 minutes and deletes job folders past `expires_at`. If a file is locked (Windows refuses to delete a file that is still being streamed), the `PermissionError` is caught and logged, and the folder is retried on the next run.
+- On startup, the whole `storage/jobs/` folder is emptied (jobs are not restored).
+- **Render free tier reality**: the instance sleeps after about 15 minutes without requests, and a sleep or redeploy wipes the disk and the in-memory jobs. During generation the frontend's polling keeps it awake, and streaming keeps it awake while someone listens. In Phase 5 a free external uptime monitor pings `/api/health` every 10 minutes so the instance stays awake and the 24 h retention mostly holds. The UI therefore never promises 24 h; it says "temporary, download what you want to keep".
 
 ## 11. Frontend
 
+Routing uses `react-router-dom` (approved dependency). `frontend/vercel.json` rewrites every path to `/index.html` so deep links like `/book/:jobId` work on Vercel.
+
 Routes:
 - `/` — upload card (drag-and-drop + picker, client-side type/size check, rejection messages), **Try a sample** button, short "how it works", limits shown from `/api/config`.
-- `/book/:jobId` — progress bar + ETA, chapter list (title, duration, status, play, download), sticky player, **Download full book**, expiry notice.
-- `/sample` — the same book view backed by the static sample.
+- `/book/:jobId` — progress bar + ETA, chapter list (title, duration, status, play, download), sticky player, **Download full book**, "audio is temporary" notice. If the API returns `JOB_NOT_FOUND` or `JOB_EXPIRED`, show the "no longer available" message from §8.
+- `/sample` — the same book view backed by the static sample: `frontend/public/sample/job.json` (a job object in the §7.2 shape, status `done`) and `frontend/public/sample/ch_001.mp3` …, served by Vercel. The book view takes a data source (API or static sample) so the same components render both.
 
 Player behaviour:
 - Single `<audio>` element; source = current chapter's audio URL.
@@ -281,16 +323,20 @@ Cold start: if `/api/health` takes > 3 s, show "Waking up the server (free hosti
 | `SCANNED_PDF` | This PDF looks like scanned images with no selectable text. Scanned documents aren't supported. |
 | `EMPTY_DOCUMENT` | No readable text was found in this document. |
 | `SERVER_BUSY` | The server is busy converting other documents. Please try again in a few minutes. |
-| `JOB_NOT_FOUND` | This audiobook doesn't exist. |
-| `JOB_EXPIRED` | This audiobook has expired. Audio is kept for 24 hours — please upload the document again. |
+| `JOB_NOT_FOUND` | This audiobook is no longer available (audio is temporary). Please upload the document again. |
+| `JOB_EXPIRED` | This audiobook is no longer available (audio is temporary). Please upload the document again. |
 | `CHAPTER_NOT_READY` | This chapter is still being generated. |
 | `TTS_FAILED` | Narration failed for this chapter. |
 
 ## 13. Evaluation
-- Test set in `testset/` with hand labels (`labels.json`): expected accept/reject, and the expected ordered chapter titles.
+- Test set in `testset/` with hand labels (`labels.json`): expected accept/reject, the expected ordered chapter titles (`chapters`), and titles that may or may not appear without counting for or against the detector (`optional`).
+- **Title normalization** (applied to both detected and labeled titles): lowercase; strip a leading chapter label (`chapter|part|book|section|unit|lecture` + arabic/roman/word number) and the `:`/`.`/`-` after it; strip leading section numbers like `4.1` or `2`; strip a trailing `(part N)`; remove punctuation; collapse whitespace.
+- **Matching**: score = `rapidfuzz.fuzz.ratio` of the normalized titles (0–100). Pairs with score ≥ 80 are candidates. Matching is **one-to-one**: repeatedly take the highest-scoring remaining candidate pair and remove both titles. Order is not required for a match.
+- Detected titles that match an `optional` label (same rule) are removed before scoring, and unmatched `optional` labels are ignored.
+- **Metrics** per document: TP = matches, precision = TP / detected, recall = TP / labeled, F1; plus `order_ok` = whether the matched pairs appear in the same order in both lists. Overall precision/recall/F1 are micro-averaged (sum TP, detected and labeled over all documents).
 - `scripts/evaluate.py` runs the pipeline on every test document and reports:
   - rejection correctness (expected vs actual error code);
-  - chapter detection precision, recall, and F1 (a detected title matches a labeled title if their normalized fuzzy similarity ≥ 0.8);
+  - chapter detection precision, recall, F1 and `order_ok` (rules above);
   - which structure strategy was used;
   - leaked-noise check: number of lines in the output that look like page numbers/headers.
 - Results are written to `testset/results.md` and quoted in the README and viva.
@@ -300,6 +346,7 @@ Cold start: if `/api/health` takes > 3 s, show "Waking up the server (free hosti
 - **Backend**: Render free web service. Deployed with a Dockerfile (needed to install ffmpeg and bundle the Piper voice model). One worker. Env from `.env.example`.
 - Free-tier constraints to keep in mind: 512 MB RAM (stream files to disk, never hold a whole book's audio in memory), instance sleeps after ~15 min without requests (frontend polling keeps it awake during a job), disk is ephemeral.
 - Sample audiobook is pre-generated locally and served as static files so it plays instantly.
+- **Early deployment check (end of Phase 2)**: deploy a throwaway backend to Render that only synthesizes a short text with edge-tts and with Piper, and record (a) whether edge-tts works from Render's network, (b) Piper's speed in characters per second there, (c) peak memory while extracting the 200-page test book. These numbers decide whether the limits in §4 need lowering before Phase 3.
 
 ## 15. v2 outline (after v1 ships)
 - Detect dialogue spans in paragraphs and split them into separate segments.
@@ -334,8 +381,10 @@ Project2/
 │   │   ├── narrate.py         (Phase 2)
 │   │   └── evaluate.py        (Phase 1)
 │   ├── tests/
+│   ├── models/                (Piper voice files, gitignored; Phase 2)
+│   ├── Dockerfile             (Phase 5)
 │   └── storage/               (gitignored)
-├── frontend/                  (Vite + React)
+├── frontend/                  (Vite + React, react-router-dom, vercel.json; sample in public/sample/)
 └── testset/
     ├── README.md
     ├── labels.json

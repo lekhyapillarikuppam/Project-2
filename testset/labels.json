@@ -15,7 +15,8 @@
       "Who Stole the Tarts?",
       "Alice's Evidence"
     ],
-    "notes": "Alice (public domain). A5 book: title page, table of contents page, running headers (book title / chapter title), page numbers, hyphenated line breaks, verse passages. No PDF outline. Headings render as 'Chapter I' + title on separate lines."
+    "optional": [],
+    "notes": "Alice (public domain). A5 book: title page, table of contents page, running headers (book title / chapter title), page numbers, hyphenated line breaks, verse passages. No PDF outline. Headings render as 'Chapter I' + title on separate lines; the detector should combine them into 'Chapter I: <title>' (SPEC §6.4), and evaluation strips the 'Chapter I:' prefix."
   },
   "02_lecture_notes.pdf": {
     "expect": "accept",
@@ -27,7 +28,8 @@
       "Applications",
       "Summary"
     ],
-    "notes": "Original notes. Numbered sections 1-6 with subsections 2.1-2.3, 5.1-5.2 (not chapter level). Running header 'MA 231: Linear Algebra / Lecture Notes, Week 6', footer 'Page N'. Display equations to skip. Title block at top. Some sections are short (<150 words) so merging is acceptable."
+    "optional": [],
+    "notes": "Original notes. Numbered sections 1-6 with subsections 2.1-2.3, 5.1-5.2 (not chapter level). Running header 'MA 231: Linear Algebra / Lecture Notes, Week 6', footer 'Page N' (only 3 pages, so only the page-number footer is guaranteed to be removed). Display equations to skip. Title block at top (under 150 words, so dropped)."
   },
   "03_textbook_chapter.pdf": {
     "expect": "accept",
@@ -39,7 +41,11 @@
       "The Exponential Distribution",
       "Chapter Summary"
     ],
-    "notes": "Original single textbook chapter ('Chapter 4 Probability Distributions', starts at page 87). Labels are its sections 4.1-4.6; the chapter intro before 4.1 becomes 'Introduction'. Contains 4 footnotes, 1 table, 2 figures (plots) with captions, equations, alternating running headers."
+    "optional": [
+      "Introduction",
+      "Probability Distributions"
+    ],
+    "notes": "Original single textbook chapter ('Chapter 4 Probability Distributions', starts at page 87). Labels are its sections 4.1-4.6. The intro before 4.1 may come out as an 'Introduction' chapter or under the chapter title 'Probability Distributions'; both are optional. Contains 4 footnotes, 1 table, 2 figures (plots) with captions, equations, alternating running headers."
   },
   "04_with_outline.pdf": {
     "expect": "accept",
@@ -61,7 +67,8 @@
       "The Six Philosophers",
       "The Accuser"
     ],
-    "notes": "The Man Who Was Thursday (public domain). Has PDF bookmarks (outline): dedication + 15 chapters (16 entries). Dedication is a short verse poem; merging it into chapter 1 is acceptable. Title page and contents page come before the dedication."
+    "optional": [],
+    "notes": "The Man Who Was Thursday (public domain). Has PDF bookmarks (outline): dedication + 15 chapters (16 entries). Dedication is a 150-word verse poem and stays as its own chapter under the 40-word merge rule. Title page and contents page come before the dedication."
   },
   "05_styles.docx": {
     "expect": "accept",
@@ -71,6 +78,7 @@
       "The Duel of Dr Hirsch",
       "The Man in the Passage"
     ],
+    "optional": [],
     "notes": "First 4 stories of The Wisdom of Father Brown (public domain). Book title uses 'Title' style, each story uses 'Heading 1'. A byline paragraph precedes story 1 (too short for its own Introduction chapter)."
   },
   "06_no_styles.docx": {
@@ -87,6 +95,7 @@
       "The Blackberry-Bush",
       "The Adventures Of The Little Field Mouse"
     ],
+    "optional": [],
     "notes": "10 stories from Stories to Tell to Children (public domain). EVERY paragraph uses 'Normal' style; book title is bold 24pt, story titles are bold 16pt on their own line. Tests typography fallback for DOCX."
   },
   "07_messy.pdf": {
@@ -99,21 +108,28 @@
       "Discussion",
       "Conclusion"
     ],
-    "notes": "Original two-column paper. Title/authors/abstract before section 1; References at end (unnumbered heading). Two-column reading order, table with caption, equation. Subsections 3.1-3.3 are not top level."
+    "optional": [
+      "Front Matter",
+      "Abstract"
+    ],
+    "notes": "Original two-column paper. Title/authors/abstract before section 1 (about 100 words, so normally dropped; optional if kept). 'References' at the end must be dropped (SPEC §6.4 back matter). Two-column reading order, table with caption, equation. Subsections 3.1-3.3 are not top level."
   },
   "08_scanned.pdf": {
     "expect": "SCANNED_PDF",
     "chapters": [],
+    "optional": [],
     "notes": "6 image-only pages (no text layer)."
   },
   "09_legacy.doc": {
     "expect": "LEGACY_DOC",
     "chapters": [],
+    "optional": [],
     "notes": "Real Word 97-2003 binary (.doc)."
   },
   "10_fake.pdf": {
     "expect": "UNSUPPORTED_TYPE",
     "chapters": [],
+    "optional": [],
     "notes": "Plain text with a .pdf extension."
   }
 }

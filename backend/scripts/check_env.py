@@ -39,7 +39,7 @@ def check_packages() -> None:
         "uvicorn": "uvicorn",
         "multipart": "python-multipart",
         "pydantic_settings": "pydantic-settings",
-        "fitz": "pymupdf",
+        "pymupdf": "pymupdf",
         "docx": "python-docx",
         "edge_tts": "edge-tts",
         "num2words": "num2words",
