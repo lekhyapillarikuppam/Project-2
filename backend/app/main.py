@@ -34,6 +34,13 @@ app.add_middleware(
 )
 
 
+if settings.spike_enabled:
+    from spike.router import router as spike_router
+
+    app.include_router(spike_router)
+    logger.warning("SPIKE_ENABLED: /spike/{name} measurement endpoints are mounted")
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok", "version": settings.version}

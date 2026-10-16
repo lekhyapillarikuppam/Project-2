@@ -10,7 +10,7 @@ import pytest
 from app.config import Settings
 from app.models import Chapter, DocumentModel, Paragraph, Segment
 from app.tts import audio
-from app.tts.engines import FallbackEngine
+from app.tts.engines import FallbackEngine, PiperEngine
 from app.tts.narrator import ProgressEvent, build_full_book, narrate_document
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH")
@@ -228,3 +228,32 @@ def test_empty_text_never_reaches_an_engine(tmp_path: Path, clip: Path) -> None:
     assert result.chapters[0].status == "ready"
     with pytest.raises(ValueError):
         run(FallbackEngine(engine, engine, sleep=no_sleep).synthesize("   ", tmp_path / "e.mp3"))
+
+
+class FakeVoice:
+    """Stands in for piper.PiperVoice: writes 0.1 s of silence per call, records each call."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, bool]] = []
+
+    def synthesize_wav(self, text: str, wav, set_wav_format: bool = True) -> None:  # noqa: ANN001
+        self.calls.append((text, set_wav_format))
+        if set_wav_format:
+            wav.setframerate(22050)
+            wav.setsampwidth(2)
+            wav.setnchannels(1)
+        wav.writeframes(bytes(2 * 2205))
+
+
+def test_piper_splits_long_text_into_one_file(tmp_path: Path) -> None:
+    engine = PiperEngine(tmp_path / "unused.onnx", max_chars=40)
+    voice = FakeVoice()
+    engine._voice = voice
+    text = "First sentence is here. Second sentence is here. Third sentence is also here."
+    run(engine.synthesize(text, tmp_path / "out.mp3"))
+    assert [t for t, _ in voice.calls] == ["First sentence is here.", "Second sentence is here.",
+                                           "Third sentence is also here."]  # fmt: skip
+    assert [f for _, f in voice.calls] == [True, False, False]  # WAV format set once
+    info = audio.probe(tmp_path / "out.mp3")
+    assert info.is_standard and info.duration == pytest.approx(0.3, abs=0.1)
+    assert not list(tmp_path.glob("*.wav"))

@@ -67,12 +67,12 @@ def split_long_sentence(sentence: str, max_chars: int) -> list[str]:
     if len(sentence) <= max_chars:
         return [sentence]
     for sep in _LONG_SPLIT_SEPARATORS:
-        pieces = [p for p in sentence.split(sep)]
-        if len(pieces) == 1:
-            continue
+        pieces = sentence.split(sep)
         keep = "" if sep == " " else sep
-        pieces = [p + keep for p in pieces[:-1]] + [pieces[-1]]
-        parts = _pack([p.strip() for p in pieces if p.strip()], max_chars)
+        pieces = [p.strip() for p in [p + keep for p in pieces[:-1]] + [pieces[-1]] if p.strip()]
+        if len(pieces) <= 1:  # no separator, or only a trailing one ("…, …;"): try the next one
+            continue
+        parts = _pack(pieces, max_chars)
         if all(len(p) <= max_chars for p in parts):
             return parts
         # Some piece is still too long: split those pieces with the next separator.
@@ -98,6 +98,15 @@ def _pack(pieces: list[str], max_chars: int) -> list[str]:
     if current:
         out.append(current)
     return out
+
+
+def split_text(text: str, max_chars: int) -> list[str]:
+    """Split already-normalized text into pieces of at most max_chars at sentence, then
+    clause / word boundaries, packing short sentences together."""
+    pieces: list[str] = []
+    for sentence in split_sentences(text):
+        pieces.extend(split_long_sentence(sentence, max_chars))
+    return _pack(pieces, max_chars)
 
 
 def chunk_paragraph(text: str, max_chars: int) -> list[str]:

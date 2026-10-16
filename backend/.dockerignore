@@ -1,0 +1,8 @@
+.venv
+storage
+models
+tests
+**/__pycache__
+*.mp3
+.env
+.pytest_cache

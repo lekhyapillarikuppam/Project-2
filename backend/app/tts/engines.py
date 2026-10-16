@@ -12,6 +12,7 @@ import edge_tts
 
 from app.config import Settings
 from app.tts import audio
+from app.tts.chunk import split_text
 
 logger = logging.getLogger(__name__)
 
@@ -57,14 +58,39 @@ class EdgeTTSEngine:
             tmp.unlink(missing_ok=True)
 
 
+def load_piper_voice(model_path: Path, disable_arena: bool):  # noqa: ANN201 - piper.PiperVoice
+    """Load a Piper voice on the CPU. piper-tts 1.8.0's `PiperVoice.load` always builds the
+    onnxruntime session with default `SessionOptions`, so this builds the session itself (the
+    same way `load` does: config from `<model>.onnx.json`, CPUExecutionProvider) with the CPU
+    memory arena and memory pattern optionally disabled."""
+    import json
+
+    import onnxruntime
+    from piper import PiperVoice
+    from piper.config import PiperConfig
+
+    config = json.loads(Path(f"{model_path}.json").read_text(encoding="utf-8"))
+    options = onnxruntime.SessionOptions()
+    if disable_arena:
+        options.enable_cpu_mem_arena = False
+        options.enable_mem_pattern = False
+    session = onnxruntime.InferenceSession(
+        str(model_path), sess_options=options, providers=["CPUExecutionProvider"]
+    )
+    return PiperVoice(config=PiperConfig.from_dict(config), session=session)
+
+
 class PiperEngine:
     """Local Piper voice. The model is loaded once (lazily, thread-safe); synthesis and the
-    WAV -> MP3 re-encode run in a worker thread so the event loop stays free."""
+    WAV -> MP3 re-encode run in a worker thread so the event loop stays free. Text longer than
+    `max_chars` is synthesized in pieces into one WAV, which bounds peak memory."""
 
     name = "piper"
 
-    def __init__(self, model_path: Path) -> None:
+    def __init__(self, model_path: Path, disable_arena: bool = True, max_chars: int = 300) -> None:
         self.model_path = model_path
+        self.disable_arena = disable_arena
+        self.max_chars = max_chars
         self._voice = None
         self._load_lock = threading.Lock()
         # espeak-ng (used by Piper for phonemes) is not documented as thread-safe: one synthesis
@@ -75,18 +101,20 @@ class PiperEngine:
         if self._voice is None:
             with self._load_lock:
                 if self._voice is None:
-                    from piper import PiperVoice
-
-                    logger.info("Loading Piper voice %s", self.model_path)
-                    self._voice = PiperVoice.load(str(self.model_path))
+                    arena = "off" if self.disable_arena else "on"
+                    logger.info("Loading Piper voice %s (memory arena %s)", self.model_path, arena)
+                    self._voice = load_piper_voice(self.model_path, self.disable_arena)
         return self._voice
 
     def _synthesize_blocking(self, text: str, out_path: Path) -> None:
         wav_path = out_path.with_name(out_path.name + ".wav")
         try:
             voice = self._get_voice()
+            pieces = split_text(text, self.max_chars)
             with self._synth_lock, wave.open(str(wav_path), "wb") as wav:
-                voice.synthesize_wav(text, wav)
+                for i, piece in enumerate(pieces):
+                    # The WAV format is set by the first piece; later pieces append frames.
+                    voice.synthesize_wav(piece, wav, set_wav_format=i == 0)
             audio.encode_standard(wav_path, out_path)
             _check_output(out_path, self.name)
         finally:
@@ -208,7 +236,7 @@ def build_engine(settings: Settings, kind: str = "fallback") -> TTSEngine:
     edge = EdgeTTSEngine(settings.edge_voice)
     if kind == "edge":
         return edge
-    piper = PiperEngine(settings.piper_model_full_path)
+    piper = PiperEngine(settings.piper_model_full_path, settings.piper_disable_arena, settings.piper_max_chars)
     if kind == "piper":
         return piper
     if kind != "fallback":

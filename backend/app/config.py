@@ -38,10 +38,15 @@ class Settings(BaseSettings):
     tts_primary: str = "edge"
     edge_voice: str = "en-US-AriaNeural"
     piper_model_path: Path = Path("models/en_US-lessac-medium.onnx")
+    piper_disable_arena: bool = True  # onnxruntime CPU memory arena + memory pattern off (lower peak)
+    piper_max_chars: int = 300  # Piper input is split into pieces this long (peak grows with length)
     tts_concurrency: int = 4
     tts_chunk_max_chars: int = 1500
     tts_max_retries: int = 3
     tts_fallback_after_consecutive_failures: int = 5
+
+    # Phase 2b Render spike (removable): mounts GET /spike/{name}
+    spike_enabled: bool = False
 
     @property
     def cors_origin_list(self) -> list[str]:

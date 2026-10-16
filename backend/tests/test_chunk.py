@@ -1,5 +1,5 @@
 from app.models import Chapter, Paragraph, Segment
-from app.tts.chunk import chunk_chapter, split_long_sentence, split_sentences
+from app.tts.chunk import chunk_chapter, split_long_sentence, split_sentences, split_text
 
 
 def chapter(title: str, paragraphs: list[str], index: int = 1) -> Chapter:
@@ -37,6 +37,9 @@ def test_long_sentence_split_at_semicolons_then_commas_then_spaces() -> None:
     assert split_long_sentence("one two, three four, five six", 12) == ["one two,", "three four,", "five six"]
     assert split_long_sentence("alpha beta gamma delta", 11) == ["alpha beta", "gamma delta"]
     assert all(len(p) <= 5 for p in split_long_sentence("x" * 12, 5))
+    # A separator only at the end must not loop: fall through to the next separator.
+    assert split_long_sentence("aaaa bbbb, cccc dddd;", 12) == ["aaaa bbbb,", "cccc dddd;"]
+    assert split_long_sentence("aaaa bbbb cccc;", 10) == ["aaaa bbbb", "cccc;"]
 
 
 def test_title_chunk_first_and_normalized() -> None:
@@ -69,3 +72,24 @@ def test_empty_paragraphs_produce_no_chunks() -> None:
     chunks = chunk_chapter(chapter("T", ["* * *", "Real text."]), 1500)
     assert [c.text for c in chunks] == ["T", "Real text."]
     assert all(c.text.strip() for c in chunks)
+
+
+def test_split_text_packs_sentences_up_to_max() -> None:
+    text = "One two three. Four five six. Seven eight nine."
+    assert split_text(text, 300) == [text]
+    assert split_text(text, 30) == ["One two three. Four five six.", "Seven eight nine."]
+
+
+def test_split_text_breaks_long_sentences_at_clauses() -> None:
+    sentence = "The Rabbit ran; Alice followed it down the hole, falling, falling, falling for a very long time."
+    parts = split_text(sentence, 40)
+    assert all(len(p) <= 40 for p in parts)
+    assert parts[0] == "The Rabbit ran;"
+    assert " ".join(parts) == sentence  # nothing lost or reordered
+
+
+def test_split_text_bounds_every_piece() -> None:
+    para = " ".join(f"Sentence {i} has a clause, and another clause; then more words follow." for i in range(40))
+    parts = split_text(para, 300)
+    assert len(parts) > 1 and all(0 < len(p) <= 300 for p in parts)
+    assert " ".join(parts) == para
