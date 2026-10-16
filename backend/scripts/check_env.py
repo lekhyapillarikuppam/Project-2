@@ -1,6 +1,7 @@
 """Phase 0 environment check. Run from backend/:  python scripts/check_env.py
 
-Checks Python version, required packages, ffmpeg/ffprobe, and a tiny edge-tts synthesis.
+Checks Python version, required packages, ffmpeg/ffprobe, a tiny edge-tts synthesis, and the
+local Piper voice (load the model, synthesize one sentence).
 Exits with code 1 if anything required is missing.
 """
 
@@ -10,7 +11,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import wave
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app.config import get_settings  # noqa: E402
 
 OK = "[ OK ]"
 FAIL = "[FAIL]"
@@ -78,7 +84,8 @@ def check_binary(name: str) -> None:
 async def _edge_tts_sample(target: Path) -> None:
     import edge_tts
 
-    communicate = edge_tts.Communicate("Environment check. Hello from the audiobook generator.", "en-US-AriaNeural")
+    voice = get_settings().edge_voice
+    communicate = edge_tts.Communicate("Environment check. Hello from the audiobook generator.", voice)
     await communicate.save(str(target))
 
 
@@ -93,6 +100,27 @@ def check_edge_tts() -> None:
         report(False, "edge-tts synthesis (needs internet)", repr(e))
 
 
+def check_piper() -> None:
+    model = get_settings().piper_model_full_path
+    label = "Piper voice loads and synthesizes"
+    if not model.exists() or not model.with_name(model.name + ".json").exists():
+        hint = "run: python -m piper.download_voices --download-dir models en_US-lessac-medium"
+        report(False, label, f"{model} (or its .json) not found; {hint}")
+        return
+    try:
+        from piper import PiperVoice
+
+        voice = PiperVoice.load(str(model))
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "check.wav"
+            with wave.open(str(target), "wb") as wav:
+                voice.synthesize_wav("Environment check. Hello from Piper.", wav)
+            size = target.stat().st_size
+        report(size > 1000, label, f"{model.name}, {voice.config.sample_rate} Hz, {size} bytes")
+    except Exception as e:  # noqa: BLE001
+        report(False, label, repr(e))
+
+
 def main() -> None:
     print("Audiobook Generator — environment check\n")
     check_python()
@@ -100,6 +128,7 @@ def main() -> None:
     check_binary("ffmpeg")
     check_binary("ffprobe")
     check_edge_tts()
+    check_piper()
     print()
     if failures:
         print(f"{failures} required check(s) failed.")
