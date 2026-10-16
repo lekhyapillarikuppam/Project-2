@@ -34,3 +34,4 @@ Locked decisions. Changing any of these needs an explicit new entry below, not a
 - 2026-10-16 — Initial decisions recorded (Phase 0).
 - 2026-10-16 — D18–D24 added after the Phase 0 review; SPEC revision 2.
 - 2026-10-16 — D25 added and Phase 1 implementation rules recorded in SPEC §6.3.6 (revision 3).
+- 2026-10-16 — Held-out first run (commit 1dbf9ac): F1 0.99 (78/79), rejects 4/4, noise 0. SPEC revision 4: compound-hyphen rule narrowed, bare-number title prefix stripped in evaluation.

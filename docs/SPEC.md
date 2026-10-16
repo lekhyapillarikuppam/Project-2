@@ -1,7 +1,7 @@
 # AI-Powered Audiobook Generator — Specification (v1)
 
 Course: UMC301 Applied Data Science and Artificial Intelligence — Project 2
-Status: revision 3 (2026-10-16, after Phase 1). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
+Status: revision 4 (2026-10-16, after Phase 1b). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
 
 ---
 
@@ -135,9 +135,13 @@ These were found necessary on the development test set and are now part of the s
 - **Rotated text** (e.g. figure axis labels) is skipped.
 - **Paragraphs across page/column breaks**: a body paragraph continues into the next block when it has no final punctuation and the next block starts with a lowercase letter.
 - **Characters**: `¡`/`¿` → `!`/`?` (TeX ligature artifacts), U+FFFD removed.
-- **Hyphenation and compounds**: when a line ends with `-` and the next starts lowercase, the hyphen is **kept** if the hyphenated form (`rose-tree`) appears elsewhere in the document or the part before the hyphen is a word of ≥ 2 letters that also appears on its own in the document **and** the part after it also appears on its own; otherwise the parts are joined without the hyphen.
+- **Hyphenation and compounds**: when a line ends with a hyphen (`-`, soft hyphen, or U+2010) and the next line starts lowercase, the hyphen is **kept** only if the hyphenated form (`tea-time`) appears inside a line elsewhere in the document; otherwise the parts are joined without the hyphen. (Rev 4: the earlier "both halves are words" clause was removed; on `01_novel` it wrongly kept 6 of 95 splits such as `be-low`, `some-times`.)
 - **DOCX table of contents**: paragraphs with `TOC N` styles are removed.
-- **Column centre line** is the centre of the text area; blocks that straddle it count as full-width.
+- **Column centre line** is the centre of the text area; a block that reaches more than 2% of the text width past the centre on both sides counts as full-width.
+- **Tolerances used for "smaller"/"not larger" than body text**: running-header style ≤ body + 0.5 pt; captions ≤ 95% of body; footnotes ≤ 90% of body. Footnote markers are digits or `* † ‡ § ¶`.
+- **Page-break continuation** additionally requires both blocks to be body-size text.
+- **DOCX contents**: a `Contents` / `Table of Contents` paragraph directly before `TOC N` entries is removed with them.
+- **Structure details**: a "frequent" heading level must occur on ≥ 2 different pages (PDF); a merged tiny chapter keeps its own title as the first paragraph of the chapter it joins (so the book title and author are read at the start of chapter 1); in the outline strategy, ties between equally good title matches go to the larger font; the patterns strategy uses `N.N` headings only when there are fewer than 2 top-level `N` headings.
 
 ### 6.4 Structure detection (`pipeline/structure.py`)
 Produces an ordered list of chapters, each with a title and paragraphs. Strategies are tried in order; the first that yields a plausible result wins:
@@ -346,7 +350,9 @@ Cold start: if `/api/health` takes > 3 s, show "Waking up the server (free hosti
 ## 13. Evaluation
 - Test set in `testset/` with hand labels (`labels.json`): expected accept/reject, the expected ordered chapter titles (`chapters`), and titles that may or may not appear without counting for or against the detector (`optional`).
 - **Title normalization** (applied to both detected and labeled titles): lowercase; strip a leading chapter label (`chapter|part|book|section|unit|lecture` + arabic/roman/word number) and the `:`/`.`/`-` after it; strip leading section numbers like `4.1` or `2`; strip a trailing `(part N)`; remove punctuation; collapse whitespace.
-- If normalization leaves an **empty** string (e.g. a heading that is only `Chapter 12`), the title is instead normalized as lowercase + punctuation removed + whitespace collapsed, keeping the label (`chapter 12`). Empty titles never match each other.
+- Normalization also strips a leading bare arabic or roman number followed by a period and a space (`XVII. The Idiot` → `the idiot`, `3. Convexity` → `convexity`). (Rev 4.)
+- If normalization leaves an **empty** string (e.g. a heading that is only `Chapter 12`), the title is instead normalized as lowercase + punctuation removed + whitespace collapsed, keeping the label (`chapter 12`). Two titles that used this fallback match only if identical (`fuzz.ratio` would score `chapter 12` vs `chapter 13` at 90). Empty titles never match anything.
+- Expected-accept files that are rejected, crash, or are missing count all their labeled chapters as missed (recall), and a crash is recorded as `CRASH` instead of stopping the run.
 - **Matching**: score = `rapidfuzz.fuzz.ratio` of the normalized titles (0–100). Pairs with score ≥ 80 are candidates. Matching is **one-to-one**: repeatedly take the highest-scoring remaining candidate pair and remove both titles. Order is not required for a match.
 - Detected titles that match an `optional` label (same rule) are removed before scoring, and unmatched `optional` labels are ignored.
 - **Metrics** per document: TP = matches, precision = TP / detected, recall = TP / labeled, F1; plus `order_ok` = whether the matched pairs appear in the same order in both lists. Overall precision/recall/F1 are micro-averaged (sum TP, detected and labeled over all documents).
