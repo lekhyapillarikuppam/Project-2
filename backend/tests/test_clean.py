@@ -1,11 +1,13 @@
 from app.models import TextLine
 from app.pipeline.clean import (
     body_font_size,
+    build_vocabulary,
     clean_lines,
     drop_captions_footnotes_equations,
     header_key,
     is_equation_line,
     is_page_number_text,
+    keep_compound_hyphen,
     merge_into_paragraphs,
     normalize_chars,
     remove_running_headers_footers,
@@ -55,15 +57,15 @@ def body_page(page: int, words: str = "Body text of the page goes here.") -> Tex
 
 def test_normalize_chars_ligatures_spaces_and_soft_hyphens() -> None:
     assert normalize_chars("ﬁne ﬂow") == "fine flow"
-    assert normalize_chars("a b c") == "a b c"
-    assert normalize_chars("co­operate") == "cooperate"
+    assert normalize_chars("a\u00a0b\u2009c") == "a b c"
+    assert normalize_chars("co\u00adoperate") == "cooperate"
     assert normalize_chars("  many   spaces\n\there ") == "many spaces here"
 
 
 def test_normalize_chars_quotes_and_tex_artifacts() -> None:
     assert normalize_chars("„Hi‟") == "“Hi“"
     assert normalize_chars("stop¡ now¿") == "stop! now?"
-    assert normalize_chars("bad�glyph") == "badglyph"
+    assert normalize_chars("bad\ufffdglyph") == "badglyph"
 
 
 # --------------------------------------------------------------------------- body size
@@ -102,17 +104,38 @@ def test_repeated_header_removed_when_threshold_met() -> None:
 
 def test_header_kept_below_threshold_but_page_numbers_always_removed() -> None:
     lines = [
-        line("Short Doc Header", page=0, y=10, block=1),
-        line("Short Doc Header", page=1, y=10, block=11),
+        line("Header On Three", page=p, y=10, block=p * 10 + 1) for p in range(3)
+    ] + [line(str(p + 1), page=p, y=780, block=p * 10 + 2) for p in range(12)]
+    lines += [body_page(p) for p in range(12)]
+    out = remove_running_headers_footers(lines, 12, heights(12))
+    texts = [ln.text for ln in out]
+    assert texts.count("Header On Three") == 3  # 3 pages < max(3, 30% of 12 = 3.6)
+    assert not any(t.isdigit() for t in texts)
+
+
+def test_two_page_document_header_on_every_page_is_removed() -> None:
+    lines = [
+        line("Workshop Preprint", page=0, y=10, block=1),
+        line("Workshop Preprint", page=1, y=10, block=11),
         line("1", page=0, y=780, block=2),
         line("2", page=1, y=780, block=12),
         body_page(0),
         body_page(1),
     ]
     out = remove_running_headers_footers(lines, 2, heights(2))
-    texts = [ln.text for ln in out]
-    assert texts.count("Short Doc Header") == 2  # 2 pages < max(3, 30%)
-    assert "1" not in texts and "2" not in texts
+    assert [ln.text for ln in out] == [body_page(0).text, body_page(1).text]
+
+
+def test_two_page_document_header_on_one_page_is_kept() -> None:
+    lines = [line("Workshop Preprint", page=1, y=10, block=11), body_page(0), body_page(1)]
+    out = remove_running_headers_footers(lines, 2, heights(2))
+    assert "Workshop Preprint" in [ln.text for ln in out]
+
+
+def test_one_page_document_keeps_header_text() -> None:
+    lines = [line("Memo Header", page=0, y=10, block=1), line("7", page=0, y=780, block=2), body_page(0)]
+    out = remove_running_headers_footers(lines, 1, heights(1))
+    assert [ln.text for ln in out] == ["Memo Header", body_page(0).text]
 
 
 def test_alternating_headers_each_need_threshold() -> None:
@@ -201,6 +224,51 @@ def test_hyphen_kept_before_capital_letter() -> None:
         line("Saxon chronicle continued for many more pages of text", y=112, block=1),
     ]
     assert merge_into_paragraphs(lines, BODY)[0].text.startswith("the Anglo- Saxon")
+
+
+def _split_pair(first: str, second: str, block: int = 1, y: float = 100) -> list[TextLine]:
+    return [line(first, y=y, block=block), line(second, y=y + 12, block=block)]
+
+
+def test_compound_hyphen_kept_when_hyphenated_form_appears_elsewhere() -> None:
+    lines = [line("A large rose-tree stood near the entrance of the garden.", y=50, block=0)]
+    lines += _split_pair("the white roses on the rose-", "tree were being painted red by three men")
+    out = merge_into_paragraphs(lines, BODY)
+    assert "the rose-tree were" in out[1].text
+
+
+def test_compound_hyphen_kept_when_both_parts_appear_on_their_own() -> None:
+    lines = [line("She saw a tea kettle and a great table set for the time.", y=50, block=0)]
+    lines += _split_pair("they had a mad tea-", "time party every single afternoon")
+    out = merge_into_paragraphs(lines, BODY)
+    assert "mad tea-time party" in out[1].text
+
+
+def test_ordinary_split_word_is_joined() -> None:
+    lines = _split_pair("In another moment down went Alice, never once con-", "sidering how to get out")
+    assert "considering how" in merge_into_paragraphs(lines, BODY)[0].text
+
+
+def test_split_halves_do_not_vouch_for_themselves() -> None:
+    # "tree" only occurs as the continuation of the split, so it does not count as a standalone word.
+    lines = [line("The rose was red and very pretty indeed today.", y=50, block=0)]
+    lines += _split_pair("near the big rose-", "tree stood the gardener")
+    assert "big rosetree stood" in merge_into_paragraphs(lines, BODY)[1].text
+
+
+def test_one_letter_prefix_is_joined() -> None:
+    lines = [line("a way to go and a cat.", y=50, block=0)]
+    lines += _split_pair("she ran a-", "way from the cat as fast as she could")
+    assert "ran away from" in merge_into_paragraphs(lines, BODY)[1].text
+
+
+def test_build_vocabulary_and_keep_rule() -> None:
+    lines = _split_pair("one rose-tree and a con-", "sidering mind")
+    vocab = build_vocabulary(lines)
+    assert "rose-tree" in vocab.compounds
+    assert "con" not in vocab.words and "sidering" not in vocab.words
+    assert keep_compound_hyphen("rose", "tree", vocab)
+    assert not keep_compound_hyphen("con", "sidering", vocab)
 
 
 def test_merge_breaks_on_gap_indent_and_short_final_line() -> None:

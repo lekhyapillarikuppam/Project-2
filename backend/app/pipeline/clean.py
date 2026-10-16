@@ -7,7 +7,7 @@ import math
 import re
 import unicodedata
 from collections import Counter, defaultdict
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from app.models import TextLine
 from app.pipeline.titles import ROMAN
@@ -20,6 +20,9 @@ REPEAT_PAGE_RATIO = 0.30  # ... (SPEC §6.3.1)
 # style and is not larger than the body size, used in that zone on at least the same number of pages,
 # marks running headers whose text changes (e.g. the current chapter title on odd pages).
 HEADER_STYLE_MAX_SIZE_RATIO = 1.0
+# Short documents (SPEC §6.3.6): with exactly this many pages, zone text that appears on every page
+# is a running header/footer (the max(3, 30%) rule can never be met).
+SHORT_DOC_PAGES = 2
 
 # --- Footnotes (§6.3.5) ---
 FOOTNOTE_REGION_RATIO = 0.25  # footnotes are looked for in the bottom quarter of the page
@@ -45,7 +48,10 @@ PARAGRAPH_GAP_RATIO = 0.8  # vertical gap > 80% of the line height -> paragraph 
 INDENT_TOLERANCE = 3.0  # a line starting > 3 pt right of the block's left edge is indented
 SHORT_LINE_RATIO = 0.15  # a line ending > 15% of the column width before its right edge is "short"
 TERMINAL_PUNCTUATION = tuple(".!?:;\"'’”)")
-HYPHENS = ("-", "­", "‐")
+# A line-end hyphen is kept when the part before it (>= this many letters) and the part after it
+# both appear on their own in the document (SPEC §6.3.6, compounds).
+COMPOUND_MIN_PREFIX = 2
+HYPHENS = ("-", "\u00ad", "\u2010")
 
 PAGE_NUMBER = re.compile(
     rf"^(?:page\s+)?(?:\d+|{ROMAN})(?:\s+of\s+\d+)?$",
@@ -64,15 +70,15 @@ LIGATURES = {
 }
 CHAR_MAP = {
     **LIGATURES,
-    " ": " ",  # no-break space
-    " ": " ",
-    " ": " ",
-    " ": " ",  # thin space
-    " ": " ",
-    "­": "",  # soft hyphen
-    "​": "",  # zero-width space
-    "﻿": "",
-    "�": "",  # replacement character (glyph without a Unicode mapping)
+    "\u00a0": " ",  # no-break space
+    "\u2002": " ",
+    "\u2003": " ",
+    "\u2009": " ",  # thin space
+    "\u202f": " ",
+    "\u00ad": "",  # soft hyphen
+    "\u200b": "",  # zero-width space
+    "\ufeff": "",
+    "\ufffd": "",  # replacement character (glyph without a Unicode mapping)
     "‚": "‘",  # low single quote
     "‛": "‘",
     "„": "“",  # low double quote
@@ -136,7 +142,15 @@ def _zone(line: TextLine, page_height: float) -> str | None:
 
 
 def repeat_threshold(page_count: int) -> float:
+    """Pages a header style must repeat on: max(3, 30% of pages)."""
     return max(REPEAT_MIN_PAGES, REPEAT_PAGE_RATIO * page_count)
+
+
+def text_repeat_threshold(page_count: int) -> float:
+    """Pages a header text must repeat on: every page for 2-page documents, else max(3, 30%)."""
+    if page_count == SHORT_DOC_PAGES:
+        return page_count
+    return repeat_threshold(page_count)
 
 
 def remove_running_headers_footers(
@@ -144,6 +158,7 @@ def remove_running_headers_footers(
 ) -> list[TextLine]:
     """Drop running headers/footers and page numbers in the top/bottom zones (§6.3.1)."""
     threshold = repeat_threshold(page_count)
+    text_threshold = text_repeat_threshold(page_count)
     body_font, body_size = _body_style(lines)
     text_pages: dict[tuple[str, str], set[int]] = defaultdict(set)
     style_pages: dict[tuple[str, str | None, float], set[int]] = defaultdict(set)
@@ -171,7 +186,7 @@ def remove_running_headers_footers(
             if is_page_number_text(line.text):
                 continue
             key = header_key(line.text)
-            if key and len(text_pages[(zone, key)]) >= threshold:
+            if key and len(text_pages[(zone, key)]) >= text_threshold:
                 continue
             if (zone, line.font, round(line.font_size, 1)) in header_styles:
                 continue
@@ -249,14 +264,70 @@ def _same_size(a: float, b: float) -> bool:
     return abs(a - b) <= SAME_SIZE_TOLERANCE
 
 
-def _join(prev: str, nxt: str) -> str:
-    """Join two line texts; a trailing hyphen before a lowercase letter is removed (§6.3.2)."""
-    if prev.endswith(HYPHENS) and nxt[:1].islower():
+@dataclass(frozen=True)
+class Vocabulary:
+    """Words of a document, used to decide whether a line-end hyphen belongs to a compound."""
+
+    words: frozenset[str] = frozenset()  # lowercase words seen on their own
+    compounds: frozenset[str] = frozenset()  # lowercase hyphenated words seen inside a line
+
+
+_WORD_TOKEN = re.compile(r"[A-Za-z]+(?:-[A-Za-z]+)*")
+_TRAILING_WORD = re.compile(r"([A-Za-z]+)$")
+_LEADING_WORD = re.compile(r"^([A-Za-z]+)")
+
+
+def _ends_with_split(text: str) -> bool:
+    return text.endswith(HYPHENS)
+
+
+def build_vocabulary(lines: list[TextLine]) -> Vocabulary:
+    """Collect standalone words and in-line compounds. The two halves of a word split at a line
+    end are not counted, so a split word never vouches for itself."""
+    words: set[str] = set()
+    compounds: set[str] = set()
+    prev_split = False
+    for line in lines:
+        tokens = _WORD_TOKEN.findall(line.text)
+        if prev_split and line.text[:1].islower() and tokens:
+            tokens = tokens[1:]
+        split = _ends_with_split(line.text)
+        if split and tokens:
+            tokens = tokens[:-1]
+        for token in tokens:
+            lower = token.lower()
+            (compounds if "-" in lower else words).add(lower)
+        prev_split = split
+    return Vocabulary(frozenset(words), frozenset(compounds))
+
+
+def keep_compound_hyphen(before: str, after: str, vocabulary: Vocabulary) -> bool:
+    """SPEC §6.3.6: keep the hyphen if `before-after` appears elsewhere, or both parts appear on
+    their own and `before` has at least COMPOUND_MIN_PREFIX letters."""
+    b, a = before.lower(), after.lower()
+    if f"{b}-{a}" in vocabulary.compounds:
+        return True
+    return len(b) >= COMPOUND_MIN_PREFIX and b in vocabulary.words and a in vocabulary.words
+
+
+def _join(prev: str, nxt: str, vocabulary: Vocabulary | None = None) -> str:
+    """Join two line texts. A trailing hyphen before a lowercase letter is removed (§6.3.2)
+    unless the two parts form a compound word (§6.3.6)."""
+    if _ends_with_split(prev) and nxt[:1].islower():
+        before = _TRAILING_WORD.search(prev[:-1])
+        after = _LEADING_WORD.match(nxt)
+        if (
+            vocabulary is not None
+            and before is not None
+            and after is not None
+            and keep_compound_hyphen(before.group(1), after.group(1), vocabulary)
+        ):
+            return prev[:-1] + "-" + nxt
         return prev[:-1] + nxt
     return f"{prev} {nxt}"
 
 
-def _merge_unit(unit: TextLine, line: TextLine) -> TextLine:
+def _merge_unit(unit: TextLine, line: TextLine, vocabulary: Vocabulary | None = None) -> TextLine:
     bbox = unit.bbox
     if unit.bbox is not None and line.bbox is not None and unit.page == line.page:
         bbox = (
@@ -265,7 +336,7 @@ def _merge_unit(unit: TextLine, line: TextLine) -> TextLine:
             max(unit.bbox[2], line.bbox[2]),
             max(unit.bbox[3], line.bbox[3]),
         )
-    return replace(unit, text=_join(unit.text, line.text), bbox=bbox)
+    return replace(unit, text=_join(unit.text, line.text, vocabulary), bbox=bbox)
 
 
 def _breaks_within_block(
@@ -307,6 +378,7 @@ def merge_into_paragraphs(lines: list[TextLine], body_size: float) -> list[TextL
         key = (line.page, line.block_id)
         left, right = block_edges.get(key, (math.inf, -math.inf))
         block_edges[key] = (min(left, line.bbox[0]), max(right, line.bbox[2]))
+    vocabulary = build_vocabulary(lines)
 
     units: list[TextLine] = []
     prev: TextLine | None = None
@@ -325,7 +397,7 @@ def merge_into_paragraphs(lines: list[TextLine], body_size: float) -> list[TextL
         else:
             merge = _continues_across_blocks(unit, line, body_size)
         if merge:
-            units[-1] = _merge_unit(unit, line)
+            units[-1] = _merge_unit(unit, line, vocabulary)
         else:
             units.append(replace(line))
         prev = line
@@ -335,7 +407,7 @@ def merge_into_paragraphs(lines: list[TextLine], body_size: float) -> list[TextL
 
 def _soft_hyphen_to_hyphen(text: str) -> str:
     stripped = text.rstrip()
-    return stripped[:-1] + "-" if stripped.endswith("­") else text
+    return stripped[:-1] + "-" if stripped.endswith("\u00ad") else text
 
 
 def clean_lines(

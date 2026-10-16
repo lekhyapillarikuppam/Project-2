@@ -1,0 +1,140 @@
+{
+  "H01_persuasion.pdf": {
+    "expect": "accept",
+    "chapters": [
+      "Chapter 1",
+      "Chapter 2",
+      "Chapter 3",
+      "Chapter 4",
+      "Chapter 5",
+      "Chapter 6",
+      "Chapter 7",
+      "Chapter 8",
+      "Chapter 9",
+      "Chapter 10",
+      "Chapter 11",
+      "Chapter 12",
+      "Chapter 13",
+      "Chapter 14",
+      "Chapter 15",
+      "Chapter 16",
+      "Chapter 17",
+      "Chapter 18",
+      "Chapter 19",
+      "Chapter 20",
+      "Chapter 21",
+      "Chapter 22",
+      "Chapter 23",
+      "Chapter 24"
+    ],
+    "optional": [],
+    "notes": "LibreOffice-produced PDF (Liberation fonts), no outline. Headings are only 'Chapter N' with no title text. Running footer 'Persuasion' on every page. Title 'Persuasion' + author line before chapter 1."
+  },
+  "H02_ball_and_cross.pdf": {
+    "expect": "accept",
+    "chapters": [
+      "A DISCUSSION SOMEWHAT IN THE AIR",
+      "THE RELIGION OF THE STIPENDIARY MAGISTRATE",
+      "SOME OLD CURIOSITIES",
+      "A DISCUSSION AT DAWN",
+      "THE PEACEMAKER",
+      "THE OTHER PHILOSOPHER",
+      "THE VILLAGE OF GRASSLEY-IN-THE-HOLE",
+      "AN INTERLUDE OF ARGUMENT",
+      "THE STRANGE LADY",
+      "THE SWORDS REJOINED",
+      "A SCANDAL IN THE VILLAGE",
+      "THE DESERT ISLAND",
+      "THE GARDEN OF PEACE",
+      "A MUSEUM OF SOULS",
+      "THE DREAM OF MACIAN",
+      "THE DREAM OF TURNBULL",
+      "THE IDIOT",
+      "A RIDDLE OF FACES",
+      "THE LAST PARLEY",
+      "DIES IRAE"
+    ],
+    "optional": [],
+    "notes": "reportlab PDF, no outline. Headings are 'I. ALL CAPS TITLE' on one line (bold 14pt vs 10.5pt body). Header has book title (left) and '- N -' page number (right) on every page."
+  },
+  "H03_buster_bear.docx": {
+    "expect": "accept",
+    "chapters": [
+      "Buster Bear Goes Fishing",
+      "Little Joe Otter Gets Even With Buster Bear",
+      "Buster Bear Is Greatly Puzzled",
+      "Little Joe Otter Supplies Buster Bear With A Breakfast",
+      "Grandfather Frog'S Common-Sense",
+      "Little Joe Otter Takes Grandfather Frog'S Advice",
+      "Farmer Brown'S Boy Has No Luck At All",
+      "Farmer Brown'S Boy Feels His Hair Rise",
+      "Little Joe Otter Has Great News To Tell",
+      "Buster Bear Becomes A Hero",
+      "Blacky The Crow Tells His Plan",
+      "Farmer Brown'S Boy And Buster Bear Grow Curious",
+      "Farmer Brown'S Boy And Buster Bear Meet",
+      "A Surprising Thing Happens",
+      "Buster Bear Is A Fallen Hero",
+      "Chatterer The Red Squirrel Jumps For His Life",
+      "Buster Bear Goes Berrying",
+      "Somebody Else Goes Berrying",
+      "Buster Bear Has A Fine Time",
+      "Buster Bear Carries Off The Pail Of Farmer Brown'S Boy",
+      "Sammy Jay Makes Things Worse For Buster Bear",
+      "Buster Bear Has A Fit Of Temper",
+      "Farmer Brown'S Boy Lunches On Berries"
+    ],
+    "optional": [],
+    "notes": "DOCX where every chapter heading uses 'Heading 2' and there is no 'Heading 1' (SPEC 6.4 strategy 2 fallback)."
+  },
+  "H04_optimisation_notes.pdf": {
+    "expect": "accept",
+    "chapters": [
+      "Why Optimisation Matters",
+      "Gradient Descent",
+      "Convexity",
+      "Stochastic Gradient Descent",
+      "Momentum and Adaptive Methods",
+      "Summary"
+    ],
+    "optional": [],
+    "notes": "Original notes, Word-style docx exported by LibreOffice WITH bookmarks (outline). Numbered headings '1. ...'. Running header on each page. Short title block before section 1."
+  },
+  "H05_moby_dick.docx": {
+    "expect": "TOO_MANY_WORDS",
+    "chapters": [],
+    "optional": [],
+    "notes": "About 212,000 words."
+  },
+  "H06_encrypted.pdf": {
+    "expect": "ENCRYPTED_FILE",
+    "chapters": [],
+    "optional": [],
+    "notes": "AES-256 with a user password."
+  },
+  "H07_corrupt.pdf": {
+    "expect": "CORRUPT_FILE",
+    "chapters": [],
+    "optional": [],
+    "notes": "Valid PDF signature followed by random bytes."
+  },
+  "H08_partial_scan.pdf": {
+    "expect": "accept",
+    "chapters": [
+      "A DISCUSSION SOMEWHAT IN THE AIR",
+      "THE RELIGION OF THE STIPENDIARY MAGISTRATE",
+      "SOME OLD CURIOSITIES",
+      "A DISCUSSION AT DAWN",
+      "THE PEACEMAKER",
+      "THE OTHER PHILOSOPHER"
+    ],
+    "optional": [],
+    "notes": "First 30 pages of H02 with pages 7-8 (1-based) replaced by images. Must be accepted with the warning '2 image-only pages were skipped'. A chapter cut off at page 30 is still a chapter."
+  },
+  "H09_too_many_pages.pdf": {
+    "expect": "TOO_MANY_PAGES",
+    "chapters": [],
+    "optional": [],
+    "notes": "Sense and Sensibility at 12pt on A5."
+  }
+}

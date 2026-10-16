@@ -18,6 +18,8 @@ backend/models/
 # Test documents (copyrighted / large) — labels are committed, documents are not
 testset/docs/
 testset/output/
+testset_heldout/docs/
+testset_heldout/output/
 
 # Audio
 *.mp3

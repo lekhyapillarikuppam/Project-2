@@ -1,6 +1,6 @@
 import pytest
 
-from app.pipeline.titles import match_titles, normalize_title, prf
+from app.pipeline.titles import match_titles, normalize_title, prf, title_score
 
 
 @pytest.mark.parametrize(
@@ -66,3 +66,23 @@ def test_prf_edge_cases() -> None:
     assert prf(0, 0, 5) == (0.0, 0.0, 0.0)
     p, r, f = prf(3, 4, 6)
     assert (round(p, 3), round(r, 3), round(f, 3)) == (0.75, 0.5, 0.6)
+
+
+def test_label_only_title_keeps_its_label() -> None:
+    assert normalize_title("Chapter 12") == "chapter 12"
+    assert normalize_title("CHAPTER XII.") == "chapter xii"
+    assert normalize_title("") == ""
+
+
+def test_label_only_titles_match_only_when_identical() -> None:
+    assert title_score("Chapter 12", "Chapter 12") == 100
+    assert title_score("Chapter 12", "Chapter 13") == 0
+    assert match_titles(["Chapter 12"], ["Chapter 12"], []).tp == 1
+    assert match_titles(["Chapter 12"], ["Chapter 13"], []).tp == 0
+
+
+def test_empty_titles_never_match() -> None:
+    assert title_score("", "") == 0
+    assert title_score("...", "") == 0
+    result = match_titles([""], [""], [])
+    assert result.tp == 0 and result.f1 == 0.0

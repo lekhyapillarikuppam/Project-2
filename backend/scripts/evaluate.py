@@ -1,8 +1,9 @@
 """Evaluate rejection and chapter detection on the labeled test set (SPEC §13).
 
-    python scripts\\evaluate.py [--testset ..\\testset]
+    python scripts\\evaluate.py [--testset ..\\testset] [--history]
 
 Writes <testset>/results.md and a text dump of every accepted document to <testset>/output/.
+--history also appends a dated summary to <testset>/results_history.md (never overwritten).
 """
 
 import argparse
@@ -13,7 +14,7 @@ import sys
 import time
 from collections import Counter
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -45,6 +46,12 @@ class FileResult:
     document: DocumentModel | None = None
     match: MatchResult | None = None
     noise: int = 0
+    labeled: int = 0  # labeled chapters, counted as missed when an expected accept is not accepted
+    error: str = ""  # unexpected exception, if the pipeline crashed
+
+    @property
+    def warnings(self) -> list[str]:
+        return self.document.warnings if self.document else []
 
     @property
     def is_reject(self) -> bool:
@@ -75,13 +82,24 @@ def noise_count(document: DocumentModel) -> int:
 
 def evaluate_file(path: Path, label: dict, output_dir: Path) -> FileResult:
     settings = get_settings()
+    labeled = len(label.get("chapters", []))
     start = time.perf_counter()
     try:
         document = run_pipeline(path, path.name, settings)
     except PipelineError as e:
-        return FileResult(path.name, label["expect"], e.code, time.perf_counter() - start)
+        return FileResult(path.name, label["expect"], e.code, time.perf_counter() - start, labeled=labeled)
+    except Exception as e:  # noqa: BLE001 - one crashing file must not stop the evaluation
+        logging.exception("pipeline crashed on %s", path.name)
+        return FileResult(
+            path.name,
+            label["expect"],
+            "CRASH",
+            time.perf_counter() - start,
+            labeled=labeled,
+            error=f"{type(e).__name__}: {e}",
+        )
     seconds = time.perf_counter() - start
-    result = FileResult(path.name, label["expect"], "accept", seconds, document)
+    result = FileResult(path.name, label["expect"], "accept", seconds, document, labeled=labeled)
     titles = [c.title for c in document.chapters]
     result.match = match_titles(titles, label.get("chapters", []), label.get("optional", []))
     result.noise = noise_count(document)
@@ -108,21 +126,59 @@ def _fmt(x: float) -> str:
     return f"{x:.2f}"
 
 
-def render_markdown(results: list[FileResult]) -> str:
+@dataclass
+class Summary:
+    tp: int
+    detected: int
+    labeled: int
+    precision: float
+    recall: float
+    f1: float
+    reject_ok: int
+    rejects: int
+    noise: int
+
+
+def summarize(results: list[FileResult]) -> Summary:
+    """Micro-averaged scores. An expected accept that was rejected, crashed or is missing counts
+    with 0 detected and all its labeled chapters missed, so failures lower recall."""
     rejects = [r for r in results if r.is_reject]
     accepts = [r for r in results if not r.is_reject]
     tp = sum(r.match.tp for r in accepts if r.match)
     detected = sum(r.match.detected for r in accepts if r.match)
-    labeled = sum(r.match.labeled for r in accepts if r.match)
+    labeled = sum(r.match.labeled if r.match else r.labeled for r in accepts)
     precision, recall, f1 = prf(tp, detected, labeled)
-    reject_ok = sum(1 for r in rejects if r.passed)
+    return Summary(
+        tp,
+        detected,
+        labeled,
+        precision,
+        recall,
+        f1,
+        reject_ok=sum(1 for r in rejects if r.passed),
+        rejects=len(rejects),
+        noise=sum(r.noise for r in accepts),
+    )
+
+
+def _warnings_cell(r: FileResult) -> str:
+    return "; ".join(r.warnings) if r.warnings else "-"
+
+
+def render_markdown(results: list[FileResult], commit: str) -> str:
+    rejects = [r for r in results if r.is_reject]
+    accepts = [r for r in results if not r.is_reject]
+    summary = summarize(results)
+    tp, detected, labeled = summary.tp, summary.detected, summary.labeled
+    precision, recall, f1 = summary.precision, summary.recall, summary.f1
+    reject_ok = summary.reject_ok
     slowest = max(results, key=lambda r: r.seconds)
 
     lines = [
         "# Test set results",
         "",
         f"- Date: {date.today().isoformat()}",
-        f"- Commit: `{git_commit()}`",
+        f"- Commit: `{commit}`",
         "- Command: `python scripts\\evaluate.py` (from `backend\\`)",
         "",
         "## Overall",
@@ -139,32 +195,38 @@ def render_markdown(results: list[FileResult]) -> str:
         "",
         "## Rejections",
         "",
-        "| File | Expected | Actual | Result |",
-        "|---|---|---|---|",
+        "| File | Expected | Actual | Result | Warnings |",
+        "|---|---|---|---|---|",
     ]
     for r in rejects:
-        lines.append(f"| {r.name} | {r.expected} | {r.actual} | {'pass' if r.passed else 'FAIL'} |")
+        result = "pass" if r.passed else "FAIL"
+        lines.append(f"| {r.name} | {r.expected} | {r.actual} | {result} | {_warnings_cell(r)} |")
     lines += [
         "",
         "## Chapter detection",
         "",
-        "| File | Actual | Structure | Detected | Labeled | P | R | F1 | Order OK | Noise | Time (s) |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "| File | Actual | Structure | Detected | Labeled | P | R | F1 | Order OK | Noise | Time (s) "
+        "| Warnings |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in accepts:
         if r.match is None or r.document is None:
-            lines.append(f"| {r.name} | {r.actual} | - | - | - | - | - | - | - | - | {r.seconds:.1f} |")
+            lines.append(
+                f"| {r.name} | {r.actual} | - | 0 | {r.labeled} | 0.00 | 0.00 | 0.00 | - | - | "
+                f"{r.seconds:.1f} | - |"
+            )
             continue
         m = r.match
         lines.append(
             f"| {r.name} | {r.actual} | {r.document.structure_source} | {m.detected} | {m.labeled} | "
             f"{_fmt(m.precision)} | {_fmt(m.recall)} | {_fmt(m.f1)} | {'yes' if m.order_ok else 'no'} | "
-            f"{r.noise} | {r.seconds:.1f} |"
+            f"{r.noise} | {r.seconds:.1f} | {_warnings_cell(r)} |"
         )
     lines += ["", "## Unmatched titles", ""]
     for r in accepts:
         if r.match is None:
-            lines.append(f"- **{r.name}**: not accepted ({r.actual})")
+            detail = f": {r.error}" if r.error else ""
+            lines.append(f"- **{r.name}**: not accepted ({r.actual}{detail})")
             continue
         unmatched_d = "; ".join(r.match.unmatched_detected) or "none"
         unmatched_l = "; ".join(r.match.unmatched_labeled) or "none"
@@ -174,6 +236,45 @@ def render_markdown(results: list[FileResult]) -> str:
         lines.append(f"  - unmatched labeled: {unmatched_l}")
         lines.append(f"  - optional titles detected (not counted): {optional}")
     return "\n".join(lines) + "\n"
+
+
+def render_history_entry(results: list[FileResult], commit: str, testset: Path) -> str:
+    """One dated section for results_history.md."""
+    s = summarize(results)
+    per_file = ", ".join(
+        f"{r.name} {_fmt(r.match.f1)}" if r.match else f"{r.name} 0.00 ({r.actual})"
+        for r in results
+        if not r.is_reject
+    )
+    reject_detail = ", ".join(
+        f"{r.name} {'pass' if r.passed else 'FAIL ' + r.actual}" for r in results if r.is_reject
+    )
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    lines = [
+        f"## {stamp} - commit `{commit}`",
+        "",
+        f"- Test set: `{testset.resolve().name}`",
+        f"- Precision / recall / F1 (micro): {_fmt(s.precision)} / {_fmt(s.recall)} / {_fmt(s.f1)} "
+        f"(TP {s.tp}, detected {s.detected}, labeled {s.labeled})",
+        f"- Reject accuracy: {s.reject_ok}/{s.rejects}" + (f" ({reject_detail})" if reject_detail else ""),
+        f"- Total noise paragraphs: {s.noise}",
+        f"- Per-file F1: {per_file}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+HISTORY_HEADER = (
+    "# Evaluation history\n\n"
+    "Appended by `evaluate.py --history`; never overwritten. The first entry is the held-out score.\n"
+)
+
+
+def append_history(path: Path, entry: str) -> None:
+    """Append a section to the history file (created with a header if it does not exist)."""
+    with path.open("a", encoding="utf-8") as f:
+        if f.tell() == 0:
+            f.write(HISTORY_HEADER)
+        f.write("\n" + entry)
 
 
 def print_table(results: list[FileResult]) -> None:
@@ -198,6 +299,9 @@ def print_table(results: list[FileResult]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate the pipeline on the labeled test set.")
     parser.add_argument("--testset", type=Path, default=REPO_DIR / "testset")
+    parser.add_argument(
+        "--history", action="store_true", help="append a dated summary to <testset>/results_history.md"
+    )
     args = parser.parse_args()
 
     sys.stdout.reconfigure(encoding="utf-8")
@@ -211,16 +315,22 @@ def main() -> None:
         path = docs_dir / name
         if not path.exists():
             print(f"missing: {path}")
-            results.append(FileResult(name, label["expect"], "MISSING", 0.0))
+            labeled = len(label.get("chapters", []))
+            results.append(FileResult(name, label["expect"], "MISSING", 0.0, labeled=labeled))
             continue
         results.append(evaluate_file(path, label, output_dir))
 
     print_table(results)
-    markdown = render_markdown(results)
+    commit = git_commit()
+    markdown = render_markdown(results, commit)
     (args.testset / "results.md").write_text(markdown, encoding="utf-8")
     print()
     print(markdown.split("## Rejections")[0].strip())
     print(f"\nwrote {args.testset / 'results.md'}")
+    if args.history:
+        history = args.testset / "results_history.md"
+        append_history(history, render_history_entry(results, commit, args.testset))
+        print(f"appended {history}")
 
 
 if __name__ == "__main__":

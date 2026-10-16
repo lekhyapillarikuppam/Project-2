@@ -28,7 +28,9 @@ Locked decisions. Changing any of these needs an explicit new entry below, not a
 | D22 | Sample audiobook is static files in `frontend/public/sample/`, served by Vercel | Plays instantly even when the backend is asleep |
 | D23 | `react-router-dom` is an approved frontend dependency, with a `vercel.json` rewrite | Needed for `/book/:jobId` deep links |
 | D24 | Python dependencies are pinned to exact versions (`==`) from Phase 0 onward | edge-tts and piper-tts change their interfaces between versions |
+| D25 | A held-out test set (`testset_heldout/`) is never inspected during development; its first-run score is the honest number reported in the viva | Dev-set scores are inflated because the rules were tuned while looking at those files |
 
 ## Change log
 - 2026-10-16 — Initial decisions recorded (Phase 0).
 - 2026-10-16 — D18–D24 added after the Phase 0 review; SPEC revision 2.
+- 2026-10-16 — D25 added and Phase 1 implementation rules recorded in SPEC §6.3.6 (revision 3).

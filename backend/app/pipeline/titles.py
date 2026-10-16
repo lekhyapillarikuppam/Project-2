@@ -32,20 +32,46 @@ _PUNCTUATION = re.compile(r"[^\w\s]")
 _WHITESPACE = re.compile(r"\s+")
 
 
-def normalize_title(s: str) -> str:
-    """Lowercase; strip leading chapter label and section number, trailing "(part N)", punctuation."""
-    t = s.lower().strip()
-    t = _LEADING_LABEL.sub("", t)
-    t = _LEADING_SECTION_NUMBER.sub("", t)
-    t = _TRAILING_PART.sub("", t)
+def _strip_punctuation(t: str) -> str:
     t = _WORD_SEPARATORS.sub(" ", t)
     t = _PUNCTUATION.sub("", t)
     return _WHITESPACE.sub(" ", t).strip()
 
 
+def _normalize(s: str) -> tuple[str, bool]:
+    """(normalized title, whether the label-keeping fallback was used)."""
+    t = s.lower().strip()
+    t = _LEADING_LABEL.sub("", t)
+    t = _LEADING_SECTION_NUMBER.sub("", t)
+    t = _TRAILING_PART.sub("", t)
+    t = _strip_punctuation(t)
+    if t:
+        return t, False
+    return _strip_punctuation(s.lower()), True
+
+
+def normalize_title(s: str) -> str:
+    """Lowercase; strip leading chapter label and section number, trailing "(part N)", punctuation.
+
+    If that leaves nothing (a heading that is only `Chapter 12`), the label is kept instead:
+    lowercase, punctuation removed, whitespace collapsed (SPEC §13).
+    """
+    return _normalize(s)[0]
+
+
 def title_score(a: str, b: str) -> float:
-    """fuzz.ratio of the normalized titles (0-100)."""
-    return fuzz.ratio(normalize_title(a), normalize_title(b))
+    """fuzz.ratio of the normalized titles (0-100). Empty titles never match.
+
+    Label-only titles (`chapter 12`) differ from each other only in their number, which fuzz.ratio
+    barely notices (`chapter 12` vs `chapter 13` scores 90), so they must be identical to match.
+    """
+    na, fallback_a = _normalize(a)
+    nb, fallback_b = _normalize(b)
+    if not na or not nb:
+        return 0.0
+    if fallback_a or fallback_b:
+        return 100.0 if na == nb else 0.0
+    return fuzz.ratio(na, nb)
 
 
 def _greedy_pairs(left: list[str], right: list[str]) -> list[tuple[int, int, float]]:
