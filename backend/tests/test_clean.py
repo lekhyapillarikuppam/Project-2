@@ -237,11 +237,12 @@ def test_compound_hyphen_kept_when_hyphenated_form_appears_elsewhere() -> None:
     assert "the rose-tree were" in out[1].text
 
 
-def test_compound_hyphen_kept_when_both_parts_appear_on_their_own() -> None:
-    lines = [line("She saw a tea kettle and a great table set for the time.", y=50, block=0)]
-    lines += _split_pair("they had a mad tea-", "time party every single afternoon")
+def test_split_joined_even_when_both_parts_are_words() -> None:
+    # Rev 4: "some" and "thing" both appear on their own, but only an in-line "some-thing" keeps it.
+    lines = [line("There was some cake and a thing on the table.", y=50, block=0)]
+    lines += _split_pair("she saw some-", "thing moving in the garden")
     out = merge_into_paragraphs(lines, BODY)
-    assert "mad tea-time party" in out[1].text
+    assert "saw something moving" in out[1].text
 
 
 def test_ordinary_split_word_is_joined() -> None:
@@ -263,10 +264,9 @@ def test_one_letter_prefix_is_joined() -> None:
 
 
 def test_build_vocabulary_and_keep_rule() -> None:
-    lines = _split_pair("one rose-tree and a con-", "sidering mind")
+    lines = _split_pair("one Rose-Tree and a con-", "sidering mind")
     vocab = build_vocabulary(lines)
-    assert "rose-tree" in vocab.compounds
-    assert "con" not in vocab.words and "sidering" not in vocab.words
+    assert vocab.compounds == frozenset({"rose-tree"})  # the line-end "con-" is not a compound
     assert keep_compound_hyphen("rose", "tree", vocab)
     assert not keep_compound_hyphen("con", "sidering", vocab)
 

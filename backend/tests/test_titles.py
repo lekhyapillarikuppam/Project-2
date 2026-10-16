@@ -86,3 +86,14 @@ def test_empty_titles_never_match() -> None:
     assert title_score("...", "") == 0
     result = match_titles([""], [""], [])
     assert result.tp == 0 and result.f1 == 0.0
+
+
+def test_bare_number_prefix_is_stripped() -> None:
+    assert normalize_title("XVII. THE IDIOT") == "the idiot"
+    assert title_score("XVII. THE IDIOT", "The Idiot") == 100
+    assert title_score("3. Convexity", "Convexity") == 100
+    assert title_score("I. A Discussion", "A Discussion") == 100
+
+
+def test_roman_without_period_is_not_stripped() -> None:
+    assert normalize_title("I Am Legend") == "i am legend"

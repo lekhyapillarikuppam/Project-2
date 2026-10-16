@@ -26,6 +26,8 @@ LABEL_ONLY = re.compile(rf"^{LABEL_WORD}\s+{LABEL_NUMBER}\s*[:.]?$", re.IGNORECA
 # A chapter label followed by anything (strategy 4 text pattern).
 LABEL_START = re.compile(rf"^{LABEL_WORD}\s+{LABEL_NUMBER}\b", re.IGNORECASE)
 _LEADING_SECTION_NUMBER = re.compile(r"^\d+(?:\.\d+)*\.?\s+")
+# A bare roman number with a period ("XVII. The Idiot"); arabic ones are covered above (SPEC §13, rev 4).
+_LEADING_BARE_ROMAN = re.compile(rf"^{ROMAN}\.\s+", re.IGNORECASE)
 _TRAILING_PART = re.compile(r"\s*\(part\s+\d+\)\s*$", re.IGNORECASE)
 _WORD_SEPARATORS = re.compile(r"[-–—/_]")
 _PUNCTUATION = re.compile(r"[^\w\s]")
@@ -43,6 +45,7 @@ def _normalize(s: str) -> tuple[str, bool]:
     t = s.lower().strip()
     t = _LEADING_LABEL.sub("", t)
     t = _LEADING_SECTION_NUMBER.sub("", t)
+    t = _LEADING_BARE_ROMAN.sub("", t)
     t = _TRAILING_PART.sub("", t)
     t = _strip_punctuation(t)
     if t:

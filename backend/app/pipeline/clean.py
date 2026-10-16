@@ -48,9 +48,6 @@ PARAGRAPH_GAP_RATIO = 0.8  # vertical gap > 80% of the line height -> paragraph 
 INDENT_TOLERANCE = 3.0  # a line starting > 3 pt right of the block's left edge is indented
 SHORT_LINE_RATIO = 0.15  # a line ending > 15% of the column width before its right edge is "short"
 TERMINAL_PUNCTUATION = tuple(".!?:;\"'’”)")
-# A line-end hyphen is kept when the part before it (>= this many letters) and the part after it
-# both appear on their own in the document (SPEC §6.3.6, compounds).
-COMPOUND_MIN_PREFIX = 2
 HYPHENS = ("-", "\u00ad", "\u2010")
 
 PAGE_NUMBER = re.compile(
@@ -266,9 +263,8 @@ def _same_size(a: float, b: float) -> bool:
 
 @dataclass(frozen=True)
 class Vocabulary:
-    """Words of a document, used to decide whether a line-end hyphen belongs to a compound."""
+    """Hyphenated words of a document; they decide whether a line-end hyphen is kept."""
 
-    words: frozenset[str] = frozenset()  # lowercase words seen on their own
     compounds: frozenset[str] = frozenset()  # lowercase hyphenated words seen inside a line
 
 
@@ -282,32 +278,16 @@ def _ends_with_split(text: str) -> bool:
 
 
 def build_vocabulary(lines: list[TextLine]) -> Vocabulary:
-    """Collect standalone words and in-line compounds. The two halves of a word split at a line
-    end are not counted, so a split word never vouches for itself."""
-    words: set[str] = set()
-    compounds: set[str] = set()
-    prev_split = False
-    for line in lines:
-        tokens = _WORD_TOKEN.findall(line.text)
-        if prev_split and line.text[:1].islower() and tokens:
-            tokens = tokens[1:]
-        split = _ends_with_split(line.text)
-        if split and tokens:
-            tokens = tokens[:-1]
-        for token in tokens:
-            lower = token.lower()
-            (compounds if "-" in lower else words).add(lower)
-        prev_split = split
-    return Vocabulary(frozenset(words), frozenset(compounds))
+    """Collect the hyphenated words that appear inside a line (a hyphen at a line end is not one)."""
+    compounds = {
+        token.lower() for line in lines for token in _WORD_TOKEN.findall(line.text) if "-" in token
+    }
+    return Vocabulary(frozenset(compounds))
 
 
 def keep_compound_hyphen(before: str, after: str, vocabulary: Vocabulary) -> bool:
-    """SPEC §6.3.6: keep the hyphen if `before-after` appears elsewhere, or both parts appear on
-    their own and `before` has at least COMPOUND_MIN_PREFIX letters."""
-    b, a = before.lower(), after.lower()
-    if f"{b}-{a}" in vocabulary.compounds:
-        return True
-    return len(b) >= COMPOUND_MIN_PREFIX and b in vocabulary.words and a in vocabulary.words
+    """SPEC §6.3.6 (rev 4): keep the hyphen only if `before-after` appears inside a line elsewhere."""
+    return f"{before.lower()}-{after.lower()}" in vocabulary.compounds
 
 
 def _join(prev: str, nxt: str, vocabulary: Vocabulary | None = None) -> str:
