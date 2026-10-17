@@ -38,3 +38,7 @@ dist/
 Thumbs.db
 .vscode/*
 !.vscode/settings.json
+!backend/tests/fixtures/*.mp3
+
+# Deployment secrets (Azure VM)
+deploy/.env

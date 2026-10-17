@@ -11,6 +11,7 @@ import time
 from collections.abc import Callable
 
 from app.config import Settings
+from app.jobs.memory import memory_summary
 from app.jobs.models import ChapterState, Job, error_body, utc_now
 from app.jobs.registry import JobRegistry
 from app.pipeline import PipelineError, run_pipeline
@@ -98,6 +99,21 @@ class JobWorker:
         self.registry.update(job_id, change)
 
     async def run_job(self, job_id: str) -> None:
+        monitor = asyncio.create_task(self._log_memory(job_id))
+        try:
+            await self._run_job(job_id)
+        finally:
+            monitor.cancel()
+            logger.info("Job %s memory at end: %s", job_id, memory_summary())
+
+    async def _log_memory(self, job_id: str) -> None:
+        """Every MEMORY_LOG_INTERVAL_SECONDS while the job runs (the 1 GiB VM, SPEC §14)."""
+        interval = self.settings.memory_log_interval_seconds
+        while True:
+            logger.info("Job %s memory: %s", job_id, await asyncio.to_thread(memory_summary))
+            await asyncio.sleep(interval)
+
+    async def _run_job(self, job_id: str) -> None:
         settings = self.settings
         job = self.registry.update(job_id, lambda j: setattr(j, "status", "extracting"))
         if job is None:

@@ -2,7 +2,7 @@
 
     python scripts\\narrate.py <document.json | .pdf | .docx> --out <dir>
         [--chapters 1,3-4] [--engine edge|piper|fallback] [--fail-edge N] [--full]
-    (edge = edge-tts with retries and no fallback, as on Render; default from TTS_FALLBACK)
+    (edge = edge-tts with retries and no fallback, as on the server; default from TTS_FALLBACK)
     python scripts\\narrate.py --text-file <lines.txt> --out <dir> [--engine ...]
 
 --fail-edge N (dev only) makes the edge engine raise on its first N calls, to show the per-chunk

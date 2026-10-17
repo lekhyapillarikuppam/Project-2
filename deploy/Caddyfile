@@ -1,0 +1,31 @@
+# HTTPS in front of the API. Caddy gets a Let's Encrypt certificate for {$API_DOMAIN}
+# (the Azure DNS name) automatically; ports 80 and 443 must be open.
+{
+	servers {
+		timeouts {
+			read_header 30s
+			read_body 10m # slow uploads of up to 50 MB
+			write 30m # long audio downloads (a full book is ~60 MB)
+			idle 5m
+		}
+	}
+}
+
+{$API_DOMAIN} {
+	# Upload limit 50 MB (SPEC §4) plus multipart framing; the app checks the exact size.
+	request_body {
+		max_size 55MB
+	}
+
+	# No `encode` directive: responses are not compressed. MP3 is already compressed, and
+	# Range requests (seeking in the player) must get the exact bytes.
+
+	reverse_proxy api:8000 {
+		flush_interval -1 # stream audio as it is read
+		transport http {
+			dial_timeout 10s
+			read_timeout 30m
+			write_timeout 30m
+		}
+	}
+}

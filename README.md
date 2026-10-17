@@ -24,7 +24,7 @@ _Coming in Phase 5._
 |---|---|
 | Backend | Python, FastAPI, PyMuPDF, python-docx, edge-tts, Piper, ffmpeg |
 | Frontend | React + Vite |
-| Hosting | Render (backend), Vercel (frontend) |
+| Hosting | Azure VM with Docker + Caddy (backend), Vercel (frontend) |
 
 ## Local setup (Windows, PowerShell)
 ```powershell

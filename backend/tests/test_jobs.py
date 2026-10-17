@@ -181,3 +181,19 @@ def test_startup_wipes_old_jobs(api_settings: Settings, mp3_clip: Path) -> None:
     (stale / "input.pdf").write_bytes(b"%PDF")
     with TestClient(create_app(api_settings, edge_only(GateEngine(mp3_clip)))):
         assert not stale.exists()
+
+
+def test_memory_is_logged_while_a_job_runs(
+    api_settings: Settings, mp3_clip: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from app.jobs.memory import memory_summary, process_rss_mb
+
+    assert process_rss_mb() is None or process_rss_mb() > 10
+    assert memory_summary().startswith("process RSS")
+    caplog.set_level("INFO", logger="app.jobs.worker")
+    with TestClient(create_app(api_settings, edge_only(GateEngine(mp3_clip)))) as client:
+        job_id = upload(client, make_docx(tmp_path / "b.docx"))
+        wait_done(client, job_id)
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith(f"Job {job_id} memory")]
+    assert lines and all("process RSS" in line for line in lines)
+    assert any("memory at end" in line for line in lines)

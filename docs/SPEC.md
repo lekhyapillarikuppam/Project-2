@@ -1,7 +1,7 @@
 # AI-Powered Audiobook Generator — Specification (v1)
 
 Course: UMC301 Applied Data Science and Artificial Intelligence — Project 2
-Status: revision 5 (2026-10-17, after the Render spike). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
+Status: revision 6 (2026-10-17, backend moved from Render to an Azure VM). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
 
 ---
 
@@ -62,7 +62,7 @@ All values live in config (`.env`), not hard-coded.
  Browser (React + Vite, on Vercel)
    │  upload / poll status / stream audio / download
    ▼
- FastAPI backend (on Render, single worker)
+ FastAPI backend (Docker on an Azure B2ats v2 VM behind Caddy, single worker)
    ├── api/          HTTP endpoints
    ├── jobs/         in-memory job registry + background runner + cleanup
    ├── pipeline/     validate → extract → clean → structure  → document.json
@@ -186,8 +186,8 @@ Split each paragraph into sentences, then pack sentences into chunks of ≤ 1,50
 - Per chunk: try edge-tts up to 3 times with exponential backoff (1 s, 2 s, 4 s); if it still fails, use Piper for that chunk.
 - Switching the whole job to Piper: a counter of **consecutive chunk failures** is kept per job (a chunk counts as failed when all 3 edge-tts attempts failed). It is updated in the order chunks **finish**, under a lock; any successful edge-tts chunk resets it to 0. When it reaches 5, every remaining chunk in the job uses Piper directly.
 - Concurrency: chapters are processed strictly **one at a time, in order**. Within the current chapter up to 4 chunks are synthesized at once (config); chunks from different chapters never overlap. A chapter is marked `ready` only after its MP3 is assembled.
-- **Fallback is configurable** (`TTS_FALLBACK=piper|none`). Locally the default is `piper`. **On Render it is `none`** (D26): every Piper variant exceeded the 512 MB free-tier limit in the spike (see `docs/spike_results.md`).
-- With `TTS_FALLBACK=none`, edge-tts is retried more patiently: up to `TTS_MAX_RETRIES` attempts (Render: 5) with backoff 1, 2, 4, 8 s. A chunk that still fails is a **failed chunk**. The consecutive-failure counter still applies: at 5 consecutive failed chunks the narration service is considered unavailable, the current and all remaining chapters are marked `failed` with `TTS_FAILED`, and the job ends as `partial` (if any chapter is ready) or `failed`.
+- **Fallback is configurable** (`TTS_FALLBACK=piper|none`). Locally the default is `piper`. **On the deployed server it is `none`** (D26) unless the Piper re-test on the Azure VM (1 GB RAM) passes; on Render's 512 MB free tier every Piper variant was killed (see `docs/spike_results.md`).
+- With `TTS_FALLBACK=none`, edge-tts is retried more patiently: up to `TTS_MAX_RETRIES` attempts (deployed: 5) with backoff 1, 2, 4, 8 s. A chunk that still fails is a **failed chunk**. The consecutive-failure counter still applies: at 5 consecutive failed chunks the narration service is considered unavailable, the current and all remaining chapters are marked `failed` with `TTS_FAILED`, and the job ends as `partial` (if any chapter is ready) or `failed`.
 - Piper settings (used only when `TTS_FALLBACK=piper`): `PIPER_DISABLE_ARENA=true`, `PIPER_MAX_CHARS=300`, model `en_US-lessac-low` or `-medium`.
 
 ### 6.8 Assembly (`tts/assemble.py`)
@@ -280,7 +280,7 @@ Base path `/api`. All errors use one shape:
 
 | Method | Path | Purpose | Success |
 |---|---|---|---|
-| GET | `/api/health` | health + version (also used as keep-awake ping) | `200 {"status":"ok","version":"…"}` |
+| GET | `/api/health` | health + version (used by deploy.sh and the frontend connection check) | `200 {"status":"ok","version":"…"}` |
 | GET | `/api/config` | public limits for the frontend (max size, max pages, retention hours) | `200 {...}` |
 | POST | `/api/upload` | multipart `file` → validate → create job | `202 {"job_id": "...", "status": "queued"}` |
 | GET | `/api/jobs/{job_id}` | full job object (§7.2) | `200` |
@@ -310,7 +310,7 @@ HTTP status for each error code:
 - Root: `storage/jobs/` (path from config). Gitignored.
 - A background task runs every 10 minutes and deletes job folders past `expires_at`. If a file is locked (Windows refuses to delete a file that is still being streamed), the `PermissionError` is caught and logged, and the folder is retried on the next run.
 - On startup, the whole `storage/jobs/` folder is emptied (jobs are not restored).
-- **Render free tier reality**: the instance sleeps after about 15 minutes without requests, and a sleep or redeploy wipes the disk and the in-memory jobs. During generation the frontend's polling keeps it awake, and streaming keeps it awake while someone listens. In Phase 5 a free external uptime monitor pings `/api/health` every 10 minutes so the instance stays awake and the 24 h retention mostly holds. The UI therefore never promises 24 h; it says "temporary, download what you want to keep".
+- **Azure VM reality**: the server is always on, so the 24 h retention holds in normal operation. A redeploy or container restart still empties `storage/jobs/` (jobs are not restored, D18). The UI therefore still says "temporary, download what you want to keep" and does not promise an exact time.
 
 ## 11. Frontend
 
@@ -327,9 +327,9 @@ Player behaviour:
 - Previous/next chapter; auto-advance to the next **ready** chapter on end; if the next chapter is not ready yet, show "waiting for chapter N…" and continue when it is.
 - Last chapter + position saved in `localStorage` per `job_id` (wrapped in try/catch).
 
-Polling: `GET /api/jobs/{id}` every 3 s while status is `queued`/`extracting`/`synthesizing`; stop when finished. Polling also keeps the Render instance awake during generation.
+Polling: `GET /api/jobs/{id}` every 3 s while status is `queued`/`extracting`/`synthesizing`; stop when finished. Polling must survive dropped connections: retry with backoff (1, 2, 4, 8 s) for up to 2 minutes before showing a connection error.
 
-Cold start: if `/api/health` takes > 3 s, show "Waking up the server (free hosting), this can take up to a minute…".
+Connection check: if `/api/health` fails or takes > 5 s, show "Can't reach the server right now. Retrying…" and keep retrying in the background.
 
 ## 12. Error catalogue
 
@@ -373,11 +373,17 @@ The development set (`testset/`) was inspected while the pipeline was built, so 
 
 ## 14. Deployment
 - **Frontend**: Vercel, env `VITE_API_URL`.
-- **Backend**: Render free web service. Deployed with a Dockerfile (needed to install ffmpeg and bundle the Piper voice model). One worker. Env from `.env.example`.
-- Free-tier constraints to keep in mind: 512 MB RAM (stream files to disk, never hold a whole book's audio in memory), instance sleeps after ~15 min without requests (frontend polling keeps it awake during a job), disk is ephemeral.
+- **Backend**: Azure for Students, one **B2ats v2** Linux VM (2 vCPU AMD x64, 1 GiB RAM; free 750 h/month for 12 months), Ubuntu 24.04 LTS, region Central India, 64 GB Premium SSD OS disk, Standard static public IP (paid from the student credit) with an Azure DNS name `<label>.centralindia.cloudapp.azure.com`.
+  - The app runs as the existing Docker image (`backend/Dockerfile`), one container, one uvicorn worker, `restart: unless-stopped`, job storage on a Docker volume.
+  - **Caddy** (second container) terminates HTTPS with an automatic Let's Encrypt certificate for the Azure DNS name and reverse-proxies to the app; request body limit 55 MB.
+  - Managed with `deploy/docker-compose.yml`; `deploy/bootstrap.sh` (one-time VM setup: Docker, 2 GB swap file, firewall, unattended security updates) and `deploy/deploy.sh` (git pull → build → restart → health check).
+  - Network security group: inbound 80 and 443 from anywhere; 22 (SSH) only from the developer's IP; SSH key login only.
+  - A $5 budget alert in Azure Cost Management guards the credit.
+- Still keep memory in mind (1 GiB): stream files to disk, never hold a whole book's audio in memory.
 - Sample audiobook is pre-generated locally and served as static files so it plays instantly.
-- **Measured on Render free (2026-10-17 spike)**: idle server 148 MB; edge-tts works at 229 chars/s (98 MB); extracting a 200-page PDF takes 7.8 s at 103 MB; every Piper variant was killed for exceeding 512 MB. Consequence: `TTS_FALLBACK=none` on Render (D26), and the Docker image is built **without** Piper voices by default (`--build-arg INCLUDE_PIPER=false`).
-- **Early deployment check (end of Phase 2)**: deploy a throwaway backend to Render that only synthesizes a short text with edge-tts and with Piper, and record (a) whether edge-tts works from Render's network, (b) Piper's speed in characters per second there, (c) peak memory while extracting the 200-page test book. These numbers decide whether the limits in §4 need lowering before Phase 3.
+- **History — measured on Render free (2026-10-17 spike, why we moved)**: idle server 148 MB; edge-tts works at 229 chars/s (98 MB); extracting a 200-page PDF takes 7.8 s at 103 MB; every Piper variant was killed for exceeding 512 MB. Consequence then: `TTS_FALLBACK=none` (D26), and the Docker image is built **without** Piper voices by default (`--build-arg INCLUDE_PIPER=false`).
+- Render also ran the first real jobs (06: 172 chars/s at 0.15 CPU, no crash); the free tier's 0.15 CPU and 15-minute sleep were the reasons to move (D28).
+- **Azure acceptance check** (Phase 3b): edge-tts works from Azure's network; smoke tests for `06_no_styles.docx` and `01_novel.pdf` pass over HTTPS; chars/s and peak memory recorded in `docs/spike_results.md`; optional Piper re-test (`piper-low`, arena off, 300-char pieces) under the 1 GiB limit decides whether `TTS_FALLBACK=piper` is enabled.
 
 ## 15. v2 outline (after v1 ships)
 - Detect dialogue spans in paragraphs and split them into separate segments.

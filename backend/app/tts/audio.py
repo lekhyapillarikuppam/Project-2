@@ -97,7 +97,7 @@ def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def run_ffmpeg(args: list[str]) -> None:
-    # One thread: the Render free instance has 0.15 CPU, extra threads only add overhead.
+    # One thread per call: the server is a small VM, and these calls are short and many.
     _run([FFMPEG, "-hide_banner", "-threads", "1", "-nostdin", "-loglevel", "error", "-y", *args])
 
 
@@ -140,7 +140,10 @@ def _id3v2_size(data: bytes) -> int:
 def mp3_info(path: Path) -> AudioInfo | None:
     """Format and duration of an MP3 by walking its frame headers, without ffprobe.
 
-    Duration = frames x samples-per-frame / sample rate. Our files (edge-tts output and our own
+    Duration = frames x samples-per-frame / sample rate (576 / 24000 = 24 ms per frame for ours).
+    Counting frames is exact for what a decoder plays; a size-based estimate (bytes x 8 / bitrate)
+    is only right when the file holds nothing but audio frames of one size, and is thrown off by an
+    ID3 tag, a Xing/Info header frame (both appear in ffmpeg-joined files) or padding bits. Our files (edge-tts output and our own
     libmp3lame encodes) are CBR Layer III with no Xing/Info frame, for which this matches ffprobe.
     A leading Xing/Info frame (ffmpeg's mp3 muxer writes one in joined files) carries no audio and
     is skipped. Returns None for anything unexpected (not Layer III, a VBRI header, a broken

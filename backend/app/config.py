@@ -34,11 +34,12 @@ class Settings(BaseSettings):
     # Jobs
     max_active_jobs: int = 1
     max_queued_jobs: int = 3
-    expired_stub_minutes: int = 60  # an expired job answers JOB_EXPIRED this long, then JOB_NOT_FOUND
+    expired_stub_minutes: int = 60
+    memory_log_interval_seconds: int = 30  # while a job runs: log process RSS and cgroup memory  # an expired job answers JOB_EXPIRED this long, then JOB_NOT_FOUND
 
     # TTS
     tts_primary: str = "edge"
-    tts_fallback: Literal["piper", "none"] = "piper"  # Render: none (D26)
+    tts_fallback: Literal["piper", "none"] = "piper"  # deployed server: none (D26)
     edge_voice: str = "en-US-AriaNeural"
     piper_model_path: Path = Path("models/en_US-lessac-medium.onnx")
     piper_disable_arena: bool = True  # onnxruntime CPU memory arena + memory pattern off (lower peak)

@@ -20,7 +20,7 @@ FINISHED = ("done", "partial", "failed")
 
 
 def edge_only(engine: GateEngine):  # noqa: ANN201
-    """The Render setup (D26): edge with retries and no fallback, around the fake engine."""
+    """The deployed setup (D26): edge with retries and no fallback, around the fake engine."""
     return lambda s: FallbackEngine(
         engine, None, max_retries=s.tts_max_retries, switch_after=s.tts_fallback_after_consecutive_failures,
         sleep=no_sleep,

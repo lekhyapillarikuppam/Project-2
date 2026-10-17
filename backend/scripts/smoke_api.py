@@ -1,4 +1,4 @@
-"""End-to-end check against a running server (local or Render).
+"""End-to-end check against a running server (local or the Azure VM).
 
     python scripts\\smoke_api.py --base http://localhost:8000 --file ..\\testset\\docs\\06_no_styles.docx
     python scripts\\smoke_api.py --base http://localhost:8000 --resume <job_id>
@@ -10,7 +10,7 @@ ready while later chapters are still generating (early playback, plus a Range re
 full book, check durations with ffprobe, and print a summary.
 
 --resume attaches to an existing job instead of uploading. GET requests are retried on dropped
-connections (Render's proxy closes idle keep-alive connections): a fresh connection, backoff 1, 2,
+connections (proxies may close idle keep-alive connections): a fresh connection, backoff 1, 2,
 4, 8 s, giving up after 2 minutes. The upload (POST) is never retried.
 
 --expect-reject: upload each file and print the error code and HTTP status (all must be rejected).
@@ -180,9 +180,10 @@ def run_job(api: Api, job_id: str, out_dir: Path, poll: float, pings: int, start
             job = get_job(api, job_id)
         except JobGone as e:
             print(
-                f"\njob {job_id} is gone ({e}). The server no longer knows it: it probably restarted "
-                "(redeploy, crash or out of memory; check the Render events/logs). Jobs are not "
-                "restored after a restart (D18), so upload the document again."
+                f"\nJob disappeared - server restarted? ({e} for job {job_id}). The server no longer "
+                "knows it: a redeploy, container restart, crash or out-of-memory kill empties the job "
+                "list (on the VM: docker compose logs api). Jobs are not restored after a restart "
+                "(D18), so upload the document again."
             )
             return 2
         now = time.perf_counter()

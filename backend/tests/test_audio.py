@@ -121,3 +121,23 @@ def test_id3_tag_is_skipped(tmp_path: Path) -> None:
     tag = b"ID3\x03\x00\x00" + bytes([0, 0, 0, 20]) + b"\x00" * 20
     tagged.write_bytes(tag + clip.read_bytes())
     assert audio.mp3_info(tagged).duration == pytest.approx(audio.mp3_info(clip).duration)
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.mark.parametrize("name", ["edge_short.mp3", "edge_sentence.mp3"])
+def test_frame_duration_matches_ffprobe_for_real_edge_chunks(name: str) -> None:
+    # Real edge-tts output (en-US-AriaNeural), saved as fixtures so the test needs no network.
+    chunk = FIXTURES / name
+    parsed, probed = audio.mp3_info(chunk), audio.probe(chunk)
+    assert parsed is not None and parsed.is_standard and parsed.bit_rate == 48000
+    assert abs(parsed.duration - probed.duration) <= 0.05
+
+
+def test_frame_duration_of_joined_edge_chunks_and_silence(tmp_path: Path) -> None:
+    pause = audio.make_silence(400, tmp_path / "pause.mp3")
+    parts = [FIXTURES / "edge_short.mp3", pause, FIXTURES / "edge_sentence.mp3"]
+    joined = audio.concat(parts, tmp_path / "chapter.mp3")
+    summed = sum(audio.mp3_info(p).duration for p in parts)
+    assert abs(audio.probe(joined).duration - summed) <= 0.05
