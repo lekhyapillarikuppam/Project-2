@@ -185,7 +185,9 @@ def _assemble_chapter(chunks: list[Chunk], work: Path, out_path: Path) -> float:
         elif chunk.ends_paragraph and not is_last:
             parts.append(paragraph_pause)
 
-    infos = {p: audio.probe(p) for p in set(parts)}
+    # Part durations from the MP3 frame headers (no ffprobe per part); one ffprobe of the joined
+    # chapter is the cross-check.
+    infos = {p: audio.fast_probe(p) for p in set(parts)}
     summed = sum(infos[p].duration for p in parts)
     audio.concat(parts, out_path, infos)
     probed = audio.probe(out_path).duration
@@ -228,8 +230,24 @@ async def _narrate_chapter(
         )
     )
     try:
-        used = await _synthesize_chunks(plan.chunks, work, engine, settings.tts_concurrency, run, emit)
-        duration = await asyncio.to_thread(_assemble_chapter, plan.chunks, work, out_path)
+        with audio.track_processes() as processes:
+            started = time.perf_counter()
+            used = await _synthesize_chunks(plan.chunks, work, engine, settings.tts_concurrency, run, emit)
+            synthesized = time.perf_counter()
+            duration = await asyncio.to_thread(_assemble_chapter, plan.chunks, work, out_path)
+            assembled = time.perf_counter()
+        logger.info(
+            "Chapter %d timing: synthesis %.1f s (%d chunks, %d chars), assembly %.1f s; "
+            "%d ffmpeg + %d ffprobe calls, %.1f s in subprocesses",
+            plan.index,
+            synthesized - started,
+            len(plan.chunks),
+            plan.chars,
+            assembled - synthesized,
+            processes.ffmpeg_calls,
+            processes.ffprobe_calls,
+            processes.seconds,
+        )
     except Exception as e:  # noqa: BLE001 - a failed chapter must not stop the book (unless unavailable)
         out_path.unlink(missing_ok=True)
         _fail_chapter(result, str(e) or type(e).__name__, run, emit)
