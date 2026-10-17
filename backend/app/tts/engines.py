@@ -16,7 +16,7 @@ from app.tts.chunk import split_text
 
 logger = logging.getLogger(__name__)
 
-EDGE_BACKOFF_SECONDS = (1.0, 2.0, 4.0)  # SPEC §6.7; delay after failed attempt 1, 2, (3)
+EDGE_BACKOFF_SECONDS = (1.0, 2.0, 4.0, 8.0)  # SPEC §6.7: delay after failed attempt 1, 2, 3, 4+ (capped)
 
 
 class TTSEngine(Protocol):
@@ -27,6 +27,14 @@ class TTSEngine(Protocol):
 
 class SynthesisError(RuntimeError):
     pass
+
+
+class ChunkFailed(SynthesisError):
+    """A chunk failed on every available engine (its chapter fails, D27)."""
+
+
+class NarrationUnavailable(SynthesisError):
+    """Too many consecutive chunks failed with no fallback: stop narrating the job (D26)."""
 
 
 def _require_text(text: str) -> None:
@@ -127,16 +135,19 @@ class PiperEngine:
 
 
 class FallbackEngine:
-    """SPEC §6.7 policy: each chunk tries the primary up to `max_retries` times with backoff, then
-    uses the fallback. After `switch_after` consecutive chunk failures (counted in finish order,
-    reset by any primary success) every remaining chunk goes straight to the fallback."""
+    """SPEC §6.7 policy. Each chunk tries the primary up to `max_retries` times with backoff.
 
-    name = "fallback"
+    With a `fallback` engine (TTS_FALLBACK=piper) the chunk then uses the fallback, and after
+    `switch_after` consecutive chunk failures every remaining chunk goes straight to the fallback.
+    Without one (TTS_FALLBACK=none, D26) the chunk raises `ChunkFailed`, and at `switch_after`
+    consecutive failures `NarrationUnavailable` is raised for this and every later chunk.
+    The counter is updated in the order chunks finish, under a lock; a primary success resets it.
+    """
 
     def __init__(
         self,
         primary: TTSEngine,
-        fallback: TTSEngine,
+        fallback: TTSEngine | None,
         max_retries: int = 3,
         backoff: Sequence[float] = EDGE_BACKOFF_SECONDS,
         switch_after: int = 5,
@@ -150,8 +161,12 @@ class FallbackEngine:
         self._sleep = sleep
         self._lock = threading.Lock()
         self.consecutive_failures = 0
-        self.switched = False
+        self.switched = False  # to the fallback, or (without one) narration unavailable
         self.used: set[str] = set()
+
+    @property
+    def name(self) -> str:
+        return self.primary.name if self.fallback is None else "fallback"
 
     @property
     def engine_used(self) -> str | None:
@@ -159,6 +174,11 @@ class FallbackEngine:
         if not self.used:
             return None
         return next(iter(self.used)) if len(self.used) == 1 else "mixed"
+
+    def _unavailable(self) -> NarrationUnavailable:
+        return NarrationUnavailable(
+            f"{self.primary.name} failed on {self.switch_after} consecutive chunks; narration is unavailable"
+        )
 
     def _record(self, success: bool) -> None:
         with self._lock:
@@ -168,12 +188,19 @@ class FallbackEngine:
             self.consecutive_failures += 1
             if not self.switched and self.consecutive_failures >= self.switch_after:
                 self.switched = True
-                logger.warning(
-                    "%s failed on %d consecutive chunks: switching the rest of the job to %s",
-                    self.primary.name,
-                    self.consecutive_failures,
-                    self.fallback.name,
-                )
+                if self.fallback is None:
+                    logger.error(
+                        "%s failed on %d consecutive chunks: narration unavailable, stopping the job",
+                        self.primary.name,
+                        self.consecutive_failures,
+                    )
+                else:
+                    logger.warning(
+                        "%s failed on %d consecutive chunks: switching the rest of the job to %s",
+                        self.primary.name,
+                        self.consecutive_failures,
+                        self.fallback.name,
+                    )
 
     async def _try_primary(self, text: str, out_path: Path, voice: str | None) -> bool:
         for attempt in range(1, self.max_retries + 1):
@@ -198,6 +225,8 @@ class FallbackEngine:
     async def synthesize_tracked(self, text: str, out_path: Path, voice: str | None = None) -> str:
         """Synthesize one chunk and return the engine that produced it ('edge' or 'piper')."""
         _require_text(text)
+        if self.switched and self.fallback is None:
+            raise self._unavailable()
         if not self.switched:
             if await self._try_primary(text, out_path, voice):
                 self._record(True)
@@ -206,14 +235,20 @@ class FallbackEngine:
             # The chunk counts as failed unless the job switched while it was retrying.
             if not self.switched:
                 self._record(False)
-                logger.warning(
-                    "Using %s for %s (%s failed %d times; %d consecutive chunk failures)",
-                    self.fallback.name,
-                    out_path.name,
-                    self.primary.name,
-                    self.max_retries,
-                    self.consecutive_failures,
-                )
+                if self.fallback is not None:
+                    logger.warning(
+                        "Using %s for %s (%s failed %d times; %d consecutive chunk failures)",
+                        self.fallback.name,
+                        out_path.name,
+                        self.primary.name,
+                        self.max_retries,
+                        self.consecutive_failures,
+                    )
+            if self.fallback is None:
+                if self.switched:
+                    raise self._unavailable()
+                raise ChunkFailed(f"{self.primary.name} failed {self.max_retries} times for {out_path.name}")
+        assert self.fallback is not None
         await self.fallback.synthesize(text, out_path, voice)
         self.used.add(self.fallback.name)
         return self.fallback.name
@@ -231,19 +266,26 @@ async def synthesize_tracked(engine: TTSEngine, text: str, out_path: Path) -> st
     return engine.name
 
 
-def build_engine(settings: Settings, kind: str = "fallback") -> TTSEngine:
-    """'edge' | 'piper' | 'fallback' (edge with Piper fallback, the normal production setup)."""
-    edge = EdgeTTSEngine(settings.edge_voice)
-    if kind == "edge":
-        return edge
-    piper = PiperEngine(settings.piper_model_full_path, settings.piper_disable_arena, settings.piper_max_chars)
+def build_engine(settings: Settings, kind: str | None = None) -> TTSEngine:
+    """The engine for a job. `kind`:
+    - 'fallback': edge-tts with retries, then Piper per chunk (TTS_FALLBACK=piper);
+    - 'edge': edge-tts with retries and no fallback (TTS_FALLBACK=none, D26);
+    - 'piper': Piper only (local measurements).
+    Default: from `settings.tts_fallback`."""
+    if kind is None:
+        kind = "fallback" if settings.tts_fallback == "piper" else "edge"
     if kind == "piper":
-        return piper
-    if kind != "fallback":
+        return PiperEngine(settings.piper_model_full_path, settings.piper_disable_arena, settings.piper_max_chars)
+    if kind not in ("edge", "fallback"):
         raise ValueError(f"unknown engine {kind!r}")
+    fallback = (
+        PiperEngine(settings.piper_model_full_path, settings.piper_disable_arena, settings.piper_max_chars)
+        if kind == "fallback"
+        else None
+    )
     return FallbackEngine(
-        edge,
-        piper,
+        EdgeTTSEngine(settings.edge_voice),
+        fallback,
         max_retries=settings.tts_max_retries,
         switch_after=settings.tts_fallback_after_consecutive_failures,
     )

@@ -1,4 +1,4 @@
-# Backend image for Render (Phase 2b spike; reused in Phase 5). Build from the backend/ folder.
+# Backend image for Render. Build from the backend/ folder.
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -15,9 +15,13 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Piper voices are downloaded at build time (never committed). The app finds them at
-# models/<voice>.onnx relative to /app, which is the PIPER_MODEL_PATH default.
-RUN python -m piper.download_voices --download-dir /app/models en_US-lessac-medium en_US-lessac-low
+# Piper voices are only needed with TTS_FALLBACK=piper. Render runs edge-only (D26), so they are
+# left out by default; build with --build-arg INCLUDE_PIPER=true to bundle them. The app finds them
+# at models/<voice>.onnx relative to /app, which is the PIPER_MODEL_PATH default.
+ARG INCLUDE_PIPER=false
+RUN if [ "$INCLUDE_PIPER" = "true" ]; then \
+        python -m piper.download_voices --download-dir /app/models en_US-lessac-medium en_US-lessac-low; \
+    fi
 
 COPY . .
 

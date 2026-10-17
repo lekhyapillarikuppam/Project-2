@@ -1,7 +1,7 @@
 # AI-Powered Audiobook Generator — Specification (v1)
 
 Course: UMC301 Applied Data Science and Artificial Intelligence — Project 2
-Status: revision 4 (2026-10-16, after Phase 1b). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
+Status: revision 5 (2026-10-17, after the Render spike). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
 
 ---
 
@@ -186,13 +186,16 @@ Split each paragraph into sentences, then pack sentences into chunks of ≤ 1,50
 - Per chunk: try edge-tts up to 3 times with exponential backoff (1 s, 2 s, 4 s); if it still fails, use Piper for that chunk.
 - Switching the whole job to Piper: a counter of **consecutive chunk failures** is kept per job (a chunk counts as failed when all 3 edge-tts attempts failed). It is updated in the order chunks **finish**, under a lock; any successful edge-tts chunk resets it to 0. When it reaches 5, every remaining chunk in the job uses Piper directly.
 - Concurrency: chapters are processed strictly **one at a time, in order**. Within the current chapter up to 4 chunks are synthesized at once (config); chunks from different chapters never overlap. A chapter is marked `ready` only after its MP3 is assembled.
-- Piper on the free Render CPU is much slower than edge-tts. It is a safety net, not the normal path; the ETA shown to the user will reflect the slowdown automatically.
+- **Fallback is configurable** (`TTS_FALLBACK=piper|none`). Locally the default is `piper`. **On Render it is `none`** (D26): every Piper variant exceeded the 512 MB free-tier limit in the spike (see `docs/spike_results.md`).
+- With `TTS_FALLBACK=none`, edge-tts is retried more patiently: up to `TTS_MAX_RETRIES` attempts (Render: 5) with backoff 1, 2, 4, 8 s. A chunk that still fails is a **failed chunk**. The consecutive-failure counter still applies: at 5 consecutive failed chunks the narration service is considered unavailable, the current and all remaining chapters are marked `failed` with `TTS_FAILED`, and the job ends as `partial` (if any chapter is ready) or `failed`.
+- Piper settings (used only when `TTS_FALLBACK=piper`): `PIPER_DISABLE_ARENA=true`, `PIPER_MAX_CHARS=300`, model `en_US-lessac-low` or `-medium`.
 
 ### 6.8 Assembly (`tts/assemble.py`)
 - All audio uses the same MP3 parameters, so files can be joined with the ffmpeg concat demuxer and `-c copy` (no re-encoding).
 - The concat list file uses absolute paths written with forward slashes, each single-quoted with any `'` escaped as `'\''`, and ffmpeg is run with `-f concat -safe 0`. This works with Windows paths that contain backslashes or spaces.
 - Pre-generated silence clips in the same format: 400 ms between paragraphs, 1,000 ms after the chapter title, 2,000 ms between chapters in the full book.
 - Each chapter file starts with the narrator reading the chapter title.
+- **No silent gaps**: if any chunk of a chapter fails on every available engine, the whole chapter is `failed` (its partial audio is discarded). A listener must never get a chapter with missing text.
 - Chapter duration = the sum of the durations of its parts (each chunk and silence clip measured with ffprobe before joining). After joining, ffprobe also reads the joined file; if the two differ by more than 1 s, a warning is logged and the summed value is used. This avoids wrong durations from MP3 header information copied from the first part.
 - `full.mp3` is built on the first full-book download request (after all chapters are ready) and cached in the job folder.
 
@@ -373,6 +376,7 @@ The development set (`testset/`) was inspected while the pipeline was built, so 
 - **Backend**: Render free web service. Deployed with a Dockerfile (needed to install ffmpeg and bundle the Piper voice model). One worker. Env from `.env.example`.
 - Free-tier constraints to keep in mind: 512 MB RAM (stream files to disk, never hold a whole book's audio in memory), instance sleeps after ~15 min without requests (frontend polling keeps it awake during a job), disk is ephemeral.
 - Sample audiobook is pre-generated locally and served as static files so it plays instantly.
+- **Measured on Render free (2026-10-17 spike)**: idle server 148 MB; edge-tts works at 229 chars/s (98 MB); extracting a 200-page PDF takes 7.8 s at 103 MB; every Piper variant was killed for exceeding 512 MB. Consequence: `TTS_FALLBACK=none` on Render (D26), and the Docker image is built **without** Piper voices by default (`--build-arg INCLUDE_PIPER=false`).
 - **Early deployment check (end of Phase 2)**: deploy a throwaway backend to Render that only synthesizes a short text with edge-tts and with Piper, and record (a) whether edge-tts works from Render's network, (b) Piper's speed in characters per second there, (c) peak memory while extracting the 200-page test book. These numbers decide whether the limits in §4 need lowering before Phase 3.
 
 ## 15. v2 outline (after v1 ships)

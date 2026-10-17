@@ -80,10 +80,15 @@ def classify_pages(
 
 
 def _validate_pdf(path: Path, settings: Settings) -> ValidationResult:
+    doc = None
     try:
         doc = pymupdf.open(path)
     except Exception as e:  # noqa: BLE001 - any open failure means a damaged file
-        raise fail("CORRUPT_FILE") from e
+        logger.info("Could not open %s as PDF: %s", path.name, e)
+    if doc is None:
+        # Raised outside the except block and unchained: the open error's traceback keeps the
+        # file handle alive, and Windows then refuses to delete the rejected upload.
+        raise fail("CORRUPT_FILE")
     with doc:
         # needs_pass: a user password is required. Owner-password-only PDFs open fine and are accepted.
         if doc.needs_pass:
@@ -103,10 +108,14 @@ def _validate_pdf(path: Path, settings: Settings) -> ValidationResult:
 
 
 def _validate_docx(path: Path) -> ValidationResult:
+    opened = False
     try:
         docx.Document(str(path))
+        opened = True
     except Exception as e:  # noqa: BLE001 - any open failure means a damaged file
-        raise fail("CORRUPT_FILE") from e
+        logger.info("Could not open %s as DOCX: %s", path.name, e)
+    if not opened:
+        raise fail("CORRUPT_FILE")  # outside the except block, as in _validate_pdf
     return ValidationResult("docx")
 
 

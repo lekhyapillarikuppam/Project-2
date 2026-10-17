@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -33,9 +34,11 @@ class Settings(BaseSettings):
     # Jobs
     max_active_jobs: int = 1
     max_queued_jobs: int = 3
+    expired_stub_minutes: int = 60  # an expired job answers JOB_EXPIRED this long, then JOB_NOT_FOUND
 
     # TTS
     tts_primary: str = "edge"
+    tts_fallback: Literal["piper", "none"] = "piper"  # Render: none (D26)
     edge_voice: str = "en-US-AriaNeural"
     piper_model_path: Path = Path("models/en_US-lessac-medium.onnx")
     piper_disable_arena: bool = True  # onnxruntime CPU memory arena + memory pattern off (lower peak)
@@ -44,9 +47,6 @@ class Settings(BaseSettings):
     tts_chunk_max_chars: int = 1500
     tts_max_retries: int = 3
     tts_fallback_after_consecutive_failures: int = 5
-
-    # Phase 2b Render spike (removable): mounts GET /spike/{name}
-    spike_enabled: bool = False
 
     @property
     def cors_origin_list(self) -> list[str]:

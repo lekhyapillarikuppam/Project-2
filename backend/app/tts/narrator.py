@@ -1,5 +1,9 @@
 """Narration orchestrator (SPEC §6.7-6.8): chapters in order, chunks of one chapter in parallel,
-then assembly into `chapters/ch_NNN.mp3`. Phase 3 calls `narrate_document` from the job worker.
+then assembly into `chapters/ch_NNN.mp3`. The job worker calls `narrate_document`.
+
+No silent gaps (D27): if any chunk of a chapter fails on every available engine, the chapter is
+`failed` and its partial audio is discarded. If the engine reports `NarrationUnavailable` (D26),
+the current and every remaining chapter are `failed` and narration stops.
 """
 
 import asyncio
@@ -12,10 +16,10 @@ from pathlib import Path
 from typing import Literal
 
 from app.config import Settings
-from app.models import DocumentModel
+from app.models import Chapter, DocumentModel
 from app.tts import audio
 from app.tts.chunk import Chunk, chunk_chapter
-from app.tts.engines import TTSEngine, synthesize_tracked
+from app.tts.engines import NarrationUnavailable, TTSEngine, synthesize_tracked
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +53,6 @@ class ChapterResult:
     engine_used: str | None = None  # edge | piper | mixed
     chars: int = 0
     chunks: int = 0
-    failed_chunks: int = 0
     error: str | None = None
 
 
@@ -60,6 +63,7 @@ class NarrationResult:
     chars_total: int = 0
     chars_done: int = 0
     wall_seconds: float = 0.0
+    unavailable: bool = False  # narration stopped early (NarrationUnavailable)
 
     @property
     def chars_per_second(self) -> float:
@@ -88,6 +92,26 @@ def chapter_filename(index: int) -> str:
     return f"ch_{index:03d}.mp3"
 
 
+@dataclass(frozen=True)
+class ChapterPlan:
+    index: int
+    title: str
+    chunks: list[Chunk]
+
+    @property
+    def chars(self) -> int:
+        return sum(len(c.text) for c in self.chunks)
+
+
+def plan_narration(doc: DocumentModel, max_chars: int) -> list[ChapterPlan]:
+    """Chunk every chapter (normalized text). The worker uses it to know `chars_total` up front."""
+    return [_plan_chapter(c, max_chars) for c in doc.chapters]
+
+
+def _plan_chapter(chapter: Chapter, max_chars: int) -> ChapterPlan:
+    return ChapterPlan(chapter.index, chapter.title, chunk_chapter(chapter, max_chars))
+
+
 @dataclass
 class _Run:
     """Mutable counters of one narration (local to a single narrate_document call)."""
@@ -104,26 +128,21 @@ async def _synthesize_chunks(
     concurrency: int,
     run: _Run,
     emit: Callable[[ProgressEvent], None],
-) -> dict[int, str | None]:
-    """Synthesize one chapter's chunks, at most `concurrency` at once. Returns seq -> engine name
-    (None for chunks that failed on every engine)."""
+) -> set[str]:
+    """Synthesize one chapter's chunks, at most `concurrency` at once, and return the engines used.
+    The first chunk that fails on every engine cancels the others and its error is raised."""
     semaphore = asyncio.Semaphore(concurrency)
-    results: dict[int, str | None] = {}
+    used: set[str] = set()
     done = 0
 
     async def one(chunk: Chunk) -> None:
         nonlocal done
         async with semaphore:
             path = work / f"{chunk.seq + 1:04d}.mp3"
-            try:
-                used = await synthesize_tracked(engine, chunk.text, path)
-            except Exception as e:  # noqa: BLE001 - a failed chunk must not stop the chapter
-                logger.error("Chunk %s of chapter %d failed on every engine: %s", path.name, chunk.chapter_index, e)
-                results[chunk.seq] = None
-                return
-        results[chunk.seq] = used
+            engine_name = await synthesize_tracked(engine, chunk.text, path)
+        used.add(engine_name)
         run.chars_done += len(chunk.text)
-        run.engines.add(used)
+        run.engines.add(engine_name)
         done += 1
         emit(
             ProgressEvent(
@@ -131,30 +150,37 @@ async def _synthesize_chunks(
                 chunk.chapter_index,
                 run.chars_done,
                 run.chars_total,
-                engine=used,
+                engine=engine_name,
                 chunk_seq=chunk.seq,
                 chapter_chunks_done=done,
                 chapter_chunks_total=len(chunks),
             )
         )
 
-    await asyncio.gather(*(one(c) for c in chunks))
-    return results
+    tasks = [asyncio.create_task(one(c)) for c in chunks]
+    finished, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)
+    errors = [t.exception() for t in finished if not t.cancelled() and t.exception() is not None]
+    if errors:
+        # NarrationUnavailable wins: it stops the whole job, not just this chapter.
+        raise next((e for e in errors if isinstance(e, NarrationUnavailable)), errors[0])
+    return used
 
 
-def _assemble_chapter(chunks: list[Chunk], ok: dict[int, str | None], work: Path, out_path: Path) -> float:
+def _assemble_chapter(chunks: list[Chunk], work: Path, out_path: Path) -> float:
     """Join title, pauses and chunks into the chapter MP3 (blocking; run in a thread).
     Returns the chapter duration: the sum of the measured parts (SPEC §6.8)."""
     silences = work.parent.parent / "silence"
     title_pause = audio.silence_clip(audio.TITLE_PAUSE_MS, silences)
     paragraph_pause = audio.silence_clip(audio.PARAGRAPH_PAUSE_MS, silences)
 
-    present = [c for c in chunks if ok.get(c.seq)]
     parts: list[Path] = []
-    for i, chunk in enumerate(present):
+    for i, chunk in enumerate(chunks):
         parts.append(work / f"{chunk.seq + 1:04d}.mp3")
-        is_last = i == len(present) - 1
-        if chunk.is_title and (is_last or not present[i + 1].is_title):
+        is_last = i == len(chunks) - 1
+        if chunk.is_title and (is_last or not chunks[i + 1].is_title):
             parts.append(title_pause)
         elif chunk.ends_paragraph and not is_last:
             parts.append(paragraph_pause)
@@ -173,9 +199,15 @@ def _assemble_chapter(chunks: list[Chunk], ok: dict[int, str | None], work: Path
     return summed
 
 
+def _fail_chapter(result: ChapterResult, error: str, run: _Run, emit: Callable[[ProgressEvent], None]) -> None:
+    result.status = "failed"
+    result.error = error
+    logger.error("Chapter %d failed: %s", result.index, error)
+    emit(ProgressEvent("chapter_failed", result.index, run.chars_done, run.chars_total, error=error))
+
+
 async def _narrate_chapter(
-    chapter_index: int,
-    chunks: list[Chunk],
+    plan: ChapterPlan,
     result: ChapterResult,
     out_dir: Path,
     engine: TTSEngine,
@@ -183,31 +215,26 @@ async def _narrate_chapter(
     run: _Run,
     emit: Callable[[ProgressEvent], None],
 ) -> None:
-    work = out_dir / "work" / f"ch_{chapter_index:03d}"
+    """Narrate one chapter. Any failure marks it failed and deletes its partial audio;
+    NarrationUnavailable is re-raised after that so the caller stops."""
+    work = out_dir / "work" / f"ch_{plan.index:03d}"
     work.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "chapters" / chapter_filename(chapter_index)
+    out_path = out_dir / "chapters" / chapter_filename(plan.index)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     result.status = "generating"
-    emit(ProgressEvent("chapter_started", chapter_index, run.chars_done, run.chars_total, chapter_chunks_total=len(chunks)))
+    emit(
+        ProgressEvent(
+            "chapter_started", plan.index, run.chars_done, run.chars_total, chapter_chunks_total=len(plan.chunks)
+        )
+    )
     try:
-        ok = await _synthesize_chunks(chunks, work, engine, settings.tts_concurrency, run, emit)
-        used = {name for name in ok.values() if name}
-        result.failed_chunks = sum(1 for name in ok.values() if name is None)
-        if not used:
-            raise RuntimeError("every chunk failed on every engine")
-        if result.failed_chunks:
-            logger.warning(
-                "Chapter %d: %d of %d chunks failed on every engine and are left out",
-                chapter_index,
-                result.failed_chunks,
-                len(chunks),
-            )
-        duration = await asyncio.to_thread(_assemble_chapter, chunks, ok, work, out_path)
-    except Exception as e:  # noqa: BLE001 - a failed chapter must not stop the book
-        result.status = "failed"
-        result.error = str(e)
-        logger.error("Chapter %d failed: %s", chapter_index, e)
-        emit(ProgressEvent("chapter_failed", chapter_index, run.chars_done, run.chars_total, error=str(e)))
+        used = await _synthesize_chunks(plan.chunks, work, engine, settings.tts_concurrency, run, emit)
+        duration = await asyncio.to_thread(_assemble_chapter, plan.chunks, work, out_path)
+    except Exception as e:  # noqa: BLE001 - a failed chapter must not stop the book (unless unavailable)
+        out_path.unlink(missing_ok=True)
+        _fail_chapter(result, str(e) or type(e).__name__, run, emit)
+        if isinstance(e, NarrationUnavailable):
+            raise
         return
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -219,12 +246,12 @@ async def _narrate_chapter(
     emit(
         ProgressEvent(
             "chapter_ready",
-            chapter_index,
+            plan.index,
             run.chars_done,
             run.chars_total,
             engine=result.engine_used,
-            chapter_chunks_done=len(chunks) - result.failed_chunks,
-            chapter_chunks_total=len(chunks),
+            chapter_chunks_done=len(plan.chunks),
+            chapter_chunks_total=len(plan.chunks),
             path=out_path,
             duration_seconds=duration,
         )
@@ -237,16 +264,16 @@ async def narrate_document(
     engine: TTSEngine,
     settings: Settings,
     on_progress: Callable[[ProgressEvent], None] | None = None,
+    plan: list[ChapterPlan] | None = None,
 ) -> NarrationResult:
-    """Narrate every chapter of `doc` into `out_dir/chapters/`, strictly in order."""
+    """Narrate every chapter of `doc` into `out_dir/chapters/`, strictly in order. `plan` (from
+    `plan_narration`) can be passed to avoid chunking the document twice."""
     start = time.perf_counter()
-    plan = [(c.index, c.title, chunk_chapter(c, settings.tts_chunk_max_chars)) for c in doc.chapters]
-    run = _Run(chars_total=sum(len(ch.text) for _, _, chunks in plan for ch in chunks))
+    if plan is None:
+        plan = plan_narration(doc, settings.tts_chunk_max_chars)
+    run = _Run(chars_total=sum(p.chars for p in plan))
     result = NarrationResult(
-        chapters=[
-            ChapterResult(index, title, chars=sum(len(c.text) for c in chunks), chunks=len(chunks))
-            for index, title, chunks in plan
-        ],
+        chapters=[ChapterResult(p.index, p.title, chars=p.chars, chunks=len(p.chunks)) for p in plan],
         chars_total=run.chars_total,
     )
 
@@ -254,13 +281,17 @@ async def narrate_document(
         if on_progress is not None:
             on_progress(event)
 
-    for (index, _, chunks), chapter_result in zip(plan, result.chapters):
-        if not chunks:
-            chapter_result.status = "failed"
-            chapter_result.error = "chapter has no text to narrate"
-            emit(ProgressEvent("chapter_failed", index, run.chars_done, run.chars_total, error=chapter_result.error))
+    for position, (chapter_plan, chapter_result) in enumerate(zip(plan, result.chapters)):
+        if not chapter_plan.chunks:
+            _fail_chapter(chapter_result, "chapter has no text to narrate", run, emit)
             continue
-        await _narrate_chapter(index, chunks, chapter_result, out_dir, engine, settings, run, emit)
+        try:
+            await _narrate_chapter(chapter_plan, chapter_result, out_dir, engine, settings, run, emit)
+        except NarrationUnavailable as e:
+            result.unavailable = True
+            for later in result.chapters[position + 1 :]:
+                _fail_chapter(later, str(e), run, emit)
+            break
 
     shutil.rmtree(out_dir / "work", ignore_errors=True)
     result.chars_done = run.chars_done
@@ -270,17 +301,21 @@ async def narrate_document(
 
 
 def build_full_book(result: NarrationResult, out_dir: Path) -> Path:
-    """`full.mp3`: every ready chapter with 2 s between chapters. Cached after the first build.
-    Blocking (ffmpeg); call it via asyncio.to_thread from async code."""
+    """`full.mp3` from a narration result; see `join_full_book`."""
+    return join_full_book([c.path for c in result.chapters if c.status == "ready" and c.path], out_dir)
+
+
+def join_full_book(chapter_paths: list[Path], out_dir: Path) -> Path:
+    """`full.mp3`: the given chapter files with 2 s between chapters. Cached after the first build.
+    Blocking (ffmpeg); call it from a thread in async code."""
     target = out_dir / "full.mp3"
     if target.exists():
         return target
-    ready = [c.path for c in result.chapters if c.status == "ready" and c.path]
-    if not ready:
+    if not chapter_paths:
         raise ValueError("no ready chapters to join")
     pause = audio.silence_clip(audio.CHAPTER_PAUSE_MS, out_dir / "silence")
     parts: list[Path] = []
-    for i, path in enumerate(ready):
+    for i, path in enumerate(chapter_paths):
         if i:
             parts.append(pause)
         parts.append(path)

@@ -1,57 +1,61 @@
-"""FastAPI entry point. Phase 0: health and config endpoints only."""
+"""FastAPI entry point: routes, error handlers, and the job worker / cleanup threads (SPEC §5)."""
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import get_settings
+from app.api.errors import install_error_handlers
+from app.api.routes import FullBookBuilder, router
+from app.config import Settings, get_settings
+from app.jobs import CleanupThread, EngineFactory, JobRegistry, JobWorker, wipe_jobs_folder
+from app.tts.engines import build_engine
 
-settings = get_settings()
-
-logging.basicConfig(
-    level=settings.log_level,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
 logger = logging.getLogger("audiobook")
 
+
 @asynccontextmanager
-async def lifespan(_: FastAPI):
-    settings.storage_path.joinpath("jobs").mkdir(parents=True, exist_ok=True)
-    logger.info("Storage at %s", settings.storage_path)
-    yield
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings: Settings = app.state.settings
+    jobs_dir = settings.storage_path / "jobs"
+    wipe_jobs_folder(jobs_dir)  # jobs are not restored after a restart (D18)
+    app.state.registry.clear()
+    worker = JobWorker(app.state.registry, settings, app.state.engine_factory)
+    cleanup = CleanupThread(app.state.registry, settings)
+    app.state.worker = worker
+    worker.start()
+    cleanup.start()
+    logger.info("Storage at %s; TTS fallback: %s", settings.storage_path, settings.tts_fallback)
+    try:
+        yield
+    finally:
+        cleanup.stop()
+        worker.stop()
 
 
-app = FastAPI(title="Audiobook Generator API", version=settings.version, lifespan=lifespan)
+def create_app(settings: Settings | None = None, engine_factory: EngineFactory | None = None) -> FastAPI:
+    """Build the app. Tests pass their own settings and a fake engine factory."""
+    settings = settings or get_settings()
+    app = FastAPI(title="Audiobook Generator API", version=settings.version, lifespan=lifespan)
+    app.state.settings = settings
+    app.state.engine_factory = engine_factory or (lambda s: build_engine(s))
+    app.state.registry = JobRegistry(settings.max_queued_jobs)
+    app.state.full_books = FullBookBuilder()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
-    expose_headers=["Content-Disposition", "Content-Range", "Accept-Ranges"],
-)
-
-
-if settings.spike_enabled:
-    from spike.router import router as spike_router
-
-    app.include_router(spike_router)
-    logger.warning("SPIKE_ENABLED: /spike/{name} measurement endpoints are mounted")
-
-
-@app.get("/api/health")
-def health() -> dict:
-    return {"status": "ok", "version": settings.version}
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origin_list,
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+        expose_headers=["Content-Disposition", "Content-Range", "Accept-Ranges", "Content-Length"],
+    )
+    install_error_handlers(app)
+    app.include_router(router)
+    return app
 
 
-@app.get("/api/config")
-def public_config() -> dict:
-    return {
-        "max_file_mb": settings.max_file_mb,
-        "max_pdf_pages": settings.max_pdf_pages,
-        "max_words": settings.max_words,
-        "accepted_types": [".pdf", ".docx"],
-        "retention_hours": settings.retention_hours,
-    }
+_settings = get_settings()
+logging.basicConfig(level=_settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+app = create_app(_settings)

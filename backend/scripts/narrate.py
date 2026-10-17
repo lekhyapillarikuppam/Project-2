@@ -2,10 +2,11 @@
 
     python scripts\\narrate.py <document.json | .pdf | .docx> --out <dir>
         [--chapters 1,3-4] [--engine edge|piper|fallback] [--fail-edge N] [--full]
+    (edge = edge-tts with retries and no fallback, as on Render; default from TTS_FALLBACK)
     python scripts\\narrate.py --text-file <lines.txt> --out <dir> [--engine ...]
 
 --fail-edge N (dev only) makes the edge engine raise on its first N calls, to show the per-chunk
-fallback and the switch to Piper. --text-file narrates a text file as one chapter with one
+fallback and the switch to Piper (or, with --engine edge, failed chapters and the stop). --text-file narrates a text file as one chapter with one
 paragraph per line and copies the result to <out>/<stem>_<engine>.mp3.
 """
 
@@ -26,7 +27,7 @@ from app.config import get_settings  # noqa: E402
 from app.models import Chapter, DocumentModel, Paragraph, Segment  # noqa: E402
 from app.pipeline import PipelineError, run_pipeline  # noqa: E402
 from app.tts import audio  # noqa: E402
-from app.tts.engines import EdgeTTSEngine, FallbackEngine, TTSEngine, build_engine  # noqa: E402
+from app.tts.engines import FallbackEngine, TTSEngine, build_engine  # noqa: E402
 from app.tts.narrator import ProgressEvent, build_full_book, narrate_document  # noqa: E402
 
 logger = logging.getLogger("narrate")
@@ -114,13 +115,10 @@ def load_document(args: argparse.Namespace) -> DocumentModel:
     return run_pipeline(args.source, args.source.name, get_settings())
 
 
-def make_engine(kind: str, fail_edge: int) -> TTSEngine:
+def make_engine(kind: str | None, fail_edge: int) -> TTSEngine:
     engine = build_engine(get_settings(), kind)
-    if fail_edge:
-        if isinstance(engine, FallbackEngine):
-            engine.primary = FlakyEngine(engine.primary, fail_edge)
-        elif isinstance(engine, EdgeTTSEngine):
-            engine = FlakyEngine(engine, fail_edge)
+    if fail_edge and isinstance(engine, FallbackEngine):
+        engine.primary = FlakyEngine(engine.primary, fail_edge)
     return engine
 
 
@@ -136,7 +134,12 @@ def main() -> None:
     parser.add_argument("--text-file", type=Path, help="narrate a text file, one paragraph per line")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--chapters", help="e.g. 1,3-4")
-    parser.add_argument("--engine", choices=["edge", "piper", "fallback"], default="fallback")
+    parser.add_argument(
+        "--engine",
+        choices=["edge", "piper", "fallback"],
+        help="edge: edge-tts with retries, no fallback; fallback: edge then Piper; piper: Piper only "
+        "(default: from TTS_FALLBACK)",
+    )
     parser.add_argument("--fail-edge", type=int, default=0, metavar="N", help="dev: first N edge calls fail")
     parser.add_argument("--full", action="store_true", help="also build full.mp3")
     args = parser.parse_args()
@@ -154,9 +157,10 @@ def main() -> None:
         wanted = parse_chapters(args.chapters)
         document = document.model_copy(update={"chapters": [c for c in document.chapters if c.index in wanted]})
 
+    engine_label = args.engine or ("fallback" if get_settings().tts_fallback == "piper" else "edge")
     out_dir = args.out
     if args.text_file:
-        out_dir = args.out / f"{args.text_file.stem}_{args.engine}"
+        out_dir = args.out / f"{args.text_file.stem}_{engine_label}"
     out_dir.mkdir(parents=True, exist_ok=True)
     engine = make_engine(args.engine, args.fail_edge)
     total = len(document.chapters)
@@ -203,7 +207,7 @@ def main() -> None:
     if args.text_file:
         ready = [c for c in result.chapters if c.status == "ready" and c.path]
         if ready:
-            target = args.out / f"{args.text_file.stem}_{args.engine}.mp3"
+            target = args.out / f"{args.text_file.stem}_{engine_label}.mp3"
             shutil.copyfile(ready[0].path, target)
             print(f"sample:        {target}")
 

@@ -10,7 +10,7 @@ import pytest
 from app.config import Settings
 from app.models import Chapter, DocumentModel, Paragraph, Segment
 from app.tts import audio
-from app.tts.engines import FallbackEngine, PiperEngine
+from app.tts.engines import ChunkFailed, FallbackEngine, NarrationUnavailable, PiperEngine
 from app.tts.narrator import ProgressEvent, build_full_book, narrate_document
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH")
@@ -175,6 +175,18 @@ def test_backoff_delays_are_used(tmp_path: Path, clip: Path) -> None:
     assert delays == [1, 2]  # wait after attempts 1 and 2; attempt 3 falls straight back
 
 
+def test_backoff_with_five_retries_caps_at_eight(tmp_path: Path, clip: Path) -> None:
+    delays: list[float] = []
+
+    async def record(seconds: float) -> None:
+        delays.append(seconds)
+
+    engine = FallbackEngine(FakeEngine("edge", clip, fails=lambda _: True), None, max_retries=6, sleep=record)
+    with pytest.raises(ChunkFailed):
+        run(engine.synthesize("Hello there.", tmp_path / "x.mp3"))
+    assert delays == [1, 2, 4, 8, 8]
+
+
 def test_fully_failed_chapter_is_failed_and_next_runs(tmp_path: Path, clip: Path) -> None:
     def bad(text: str) -> bool:
         return "Chapter two" in text or text == "Title two"
@@ -257,3 +269,62 @@ def test_piper_splits_long_text_into_one_file(tmp_path: Path) -> None:
     info = audio.probe(tmp_path / "out.mp3")
     assert info.is_standard and info.duration == pytest.approx(0.3, abs=0.1)
     assert not list(tmp_path.glob("*.wav"))
+
+
+# D27: no silent gaps. D26: edge-only mode stops the job after 5 consecutive failed chunks.
+
+
+def test_one_failed_chunk_fails_the_whole_chapter(tmp_path: Path, clip: Path) -> None:
+    def bad(text: str) -> bool:
+        return text == "Chapter two paragraph two text."
+
+    engine = FallbackEngine(
+        FakeEngine("edge", clip, fails=bad), FakeEngine("piper", clip, fails=bad), switch_after=50, sleep=no_sleep
+    )
+    events: list[ProgressEvent] = []
+    doc = document([paragraphs(1, 2), paragraphs(2, 3), paragraphs(3, 2)])
+    result = run(narrate_document(doc, tmp_path, engine, settings(), events.append))
+    assert [c.status for c in result.chapters] == ["ready", "failed", "ready"]
+    assert not (tmp_path / "chapters" / "ch_002.mp3").exists()  # partial audio discarded
+    assert result.chapters[1].path is None and result.chapters[1].duration_seconds is None
+    assert ("chapter_failed", 2) in [(e.kind, e.chapter_index) for e in events]
+    assert not result.unavailable
+
+
+def test_edge_only_failed_chunk_fails_chapter_without_fallback(tmp_path: Path, clip: Path) -> None:
+    edge = FakeEngine("edge", clip, fails=lambda t: "Chapter two" in t)
+    engine = FallbackEngine(edge, None, max_retries=5, sleep=no_sleep)
+    doc = document([paragraphs(1, 2), paragraphs(2, 2), paragraphs(3, 2)])
+    result = run(narrate_document(doc, tmp_path, engine, settings(concurrency=1)))
+    assert [c.status for c in result.chapters] == ["ready", "failed", "ready"]
+    assert edge.calls.count("Chapter two paragraph one text.") == 5  # five patient attempts
+    assert result.engine_used == "edge" and not result.unavailable
+
+
+def test_edge_only_five_consecutive_failures_stop_the_job(tmp_path: Path, clip: Path) -> None:
+    # Chapter one succeeds; from chapter two on edge is down. Each failed chapter adds one failed
+    # chunk (the others are cancelled), so the fifth failed chapter makes narration unavailable.
+    edge = FakeEngine("edge", clip, fails=lambda t: "Chapter one" not in t and t != "Title one")
+    engine = FallbackEngine(edge, None, max_retries=2, switch_after=5, sleep=no_sleep)
+    events: list[ProgressEvent] = []
+    doc = document([paragraphs(n, 2) for n in range(1, 9)])
+    result = run(narrate_document(doc, tmp_path, engine, settings(concurrency=1), events.append))
+    assert [c.status for c in result.chapters] == ["ready"] + ["failed"] * 7
+    assert result.unavailable and engine.switched
+    # After the stop no later chapter reaches the engine.
+    assert not [t for t in edge.calls if "seven" in t or "eight" in t]
+    failed = [e.chapter_index for e in events if e.kind == "chapter_failed"]
+    assert failed == [2, 3, 4, 5, 6, 7, 8]
+    assert "unavailable" in (result.chapters[-1].error or "")
+    assert not list((tmp_path / "chapters").glob("ch_00[2-8].mp3"))
+
+
+def test_unavailable_engine_raises_for_every_later_chunk(tmp_path: Path, clip: Path) -> None:
+    engine = FallbackEngine(FakeEngine("edge", clip, fails=lambda _: True), None, max_retries=1, switch_after=2,
+                            sleep=no_sleep)  # fmt: skip
+    with pytest.raises(ChunkFailed):
+        run(engine.synthesize("One.", tmp_path / "a.mp3"))
+    with pytest.raises(NarrationUnavailable):
+        run(engine.synthesize("Two.", tmp_path / "b.mp3"))
+    with pytest.raises(NarrationUnavailable):
+        run(engine.synthesize("Three.", tmp_path / "c.mp3"))
