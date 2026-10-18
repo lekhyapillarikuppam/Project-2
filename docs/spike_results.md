@@ -58,3 +58,41 @@ higher, and the server itself already uses about 150 MB on Render. So Piper does
   largest allowed book: 100,000 words ≈ 537,000 chars (5.37 chars/word in *Alice*) ≈ **39 min**
   at 229 chars/s with a single stream. Concurrency 4 should do better; Phase 3 measures it on
   Render.
+
+## Azure VM (Phase 3b, D28)
+
+- **VM**: Azure for Students B2ats v2 (2 vCPU, 1 GiB RAM), Ubuntu 24.04, Central India,
+  2026-10-18. Deployed with `deploy/` (Docker Compose: `api` with `mem_limit` / `memswap_limit`
+  900m, Caddy 2.11.7 with Let's Encrypt). The VM has about 837 MiB usable RAM, so that is the
+  effective container limit (`docker stats` shows 837 MiB); the container cannot use the host's
+  swap file.
+- **Client**: `scripts/smoke_api.py` from the laptop over HTTPS, `TTS_CONCURRENCY=4`, edge-tts only
+  (`TTS_FALLBACK=none`). The server figures come from its own log lines (per-chapter timing, memory
+  every 30 s).
+
+| Measurement | `06_no_styles.docx` | `01_novel.pdf` (*Alice*) |
+|---|---|---|
+| Characters / chapters / audio | 40,521 / 10 / 46:12 | 141,249 / 12 / 2:35:47 |
+| Server: done in, chars/s | 67.7 s, **598.7 chars/s** | 196.2 s, **719.9 chars/s** |
+| Client: synthesis time, chars/s | 67.4 s, 588.1 | 195.0 s, 716.5 |
+| Assembly per chapter | 0.2–0.4 s (chapter 1: 1.8 s) | 0.4–0.5 s (chapter 1: 1.3 s) |
+| ffmpeg / ffprobe calls per chapter | 1 + 1 (chapter 1: 3 + 1, makes the silence clips) | same |
+| Early playback (chapter 1 downloaded, Range → 206) | at 0:09 | at 0:13 |
+| Full book download (built on request) | 16.7 MB in 6.8 s | 56.2 MB in 18.5 s |
+| Duration cross-checks (chapter 1, full book) | OK (0.0 s / 0.6 s) | OK (0.0 s / 0.7 s) |
+| `/api/health` while synthesizing (20 pings) | median 41 ms, max 86 ms | median 42 ms, max 45 ms |
+| Edge retries (WARNING lines) / client GET retries | 0 / 0 | 0 / 0 |
+| Peak process RSS / anon memory | 115 MB / 103 MB | **131 MB / 124 MB** |
+| Peak cgroup `memory.current` (includes MP3 page cache) | 313 MB | 330 MB |
+
+`docker stats` after the runs: api 130.5 MiB, caddy 18.5 MiB. Both containers stayed up (no
+restart, no OOM), and the health check stayed fast throughout.
+
+Compared with Render free (0.15 CPU): edge-tts throughput went from 172 to 599–720 chars/s, and the
+idle sleep is gone. Assembly is no longer a cost (about 0.5 s per chapter, from 5–11 s before the
+frame-based durations).
+
+**Projection for the largest allowed book** (100,000 words ≈ 537,000 chars at 5.37 chars/word):
+**about 12½ min** at 720 chars/s (*Alice*), at most about 15 min at 599 chars/s (the short-chapter
+DOCX). The memory does not grow with book length (audio streams to files), so a 100,000-word book
+should stay near the *Alice* figures.
