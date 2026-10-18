@@ -1,0 +1,242 @@
+.player-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  box-shadow: var(--shadow-bar);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.player-bar__inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 10px var(--gutter);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.4fr) auto;
+  grid-template-areas: 'now controls seek extra';
+  align-items: center;
+  gap: 8px 20px;
+}
+
+.player-bar__now {
+  grid-area: now;
+  min-width: 0;
+}
+
+.player-bar__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-bar__subtitle {
+  margin: 0;
+  min-height: 1.4em;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-bar__controls {
+  grid-area: controls;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.player-bar__seek {
+  grid-area: seek;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.player-bar__time {
+  flex: none;
+  min-width: 3.2em;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.player-bar__extra {
+  grid-area: extra;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Seek bar */
+.seek {
+  flex: 1;
+  min-width: 0;
+  height: var(--touch);
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.seek::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--accent) var(--seek-fill), var(--accent-soft) var(--seek-fill));
+}
+
+.seek::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
+.seek::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+}
+
+.seek::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+}
+
+.seek:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Speed */
+.speed-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.speed-control select {
+  min-height: var(--touch);
+  padding: 4px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+/* Keyboard help */
+.kbd-help {
+  position: relative;
+}
+
+.kbd-help__panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 12px);
+  width: max-content;
+  max-width: min(18rem, calc(100vw - 2 * var(--gutter)));
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 0.875rem;
+}
+
+.kbd-help__panel[hidden] {
+  display: none;
+}
+
+.kbd-help__title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.kbd-help dl {
+  margin: 0;
+}
+
+.kbd-help__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 3px 0;
+}
+
+.kbd-help dd {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+kbd {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  padding: 1px 6px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--paper);
+  white-space: nowrap;
+}
+
+/* Two rows on narrower screens: title + controls, then seek + speed. */
+@media (max-width: 860px) {
+  .player-bar__inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'now controls'
+      'seek extra';
+    gap: 4px 12px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+}
+
+/* Phones: same two rows, tighter; the 15 s buttons give way to the seek bar (no arrow keys here). */
+@media (max-width: 560px) {
+  .player-bar__inner {
+    gap: 2px 6px;
+  }
+
+  .player-bar__skip {
+    display: none;
+  }
+
+  .player-bar__controls {
+    gap: 0;
+  }
+
+  .player-bar__seek {
+    gap: 6px;
+  }
+
+  .speed-control__label {
+    display: none;
+  }
+}

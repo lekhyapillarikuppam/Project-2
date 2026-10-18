@@ -1,0 +1,23 @@
+.progress-panel {
+  margin: 8px 0 24px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.progress-panel__status {
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  margin-bottom: 12px;
+}
+
+.progress-panel__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin: 12px 0 0;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}

@@ -28,9 +28,10 @@ Locked decisions. Changing any of these needs an explicit new entry below, not a
 | D22 | Sample audiobook is static files in `frontend/public/sample/`, served by Vercel | Plays instantly even when the backend is asleep |
 | D23 | `react-router-dom` is an approved frontend dependency, with a `vercel.json` rewrite | Needed for `/book/:jobId` deep links |
 | D24 | Python dependencies are pinned to exact versions (`==`) from Phase 0 onward | edge-tts and piper-tts change their interfaces between versions |
-| D26 | On the deployed server, edge-tts is the only TTS engine unless the Azure Piper re-test passes; originally decided on Render: (`TTS_FALLBACK=none`, 5 patient retries); Piper is kept for local use only and left out of the deployed image | Render spike: every Piper variant exceeded 512 MB and crashed the instance; edge-tts worked at 229 chars/s using 98 MB |
+| D26 | The deployed server uses edge-tts only (`TTS_FALLBACK=none`, 5 patient retries). Piper stays a local-only engine and is not in the deployed image | Render: every Piper variant exceeded 512 MB. Azure: edge-tts had 0 retries over two books, while Piper would need ~700 of the VM's 837 MB; D27 already makes edge outages visible. Re-test optional, not required |
 | D27 | A chunk that fails on every available engine fails its whole chapter; no silent gaps in audio | A listener must never miss text without being told |
 | D28 | Backend moves from Render free to an **Azure for Students B2ats v2 VM** (2 vCPU, 1 GiB, always on) running the Docker image behind Caddy (HTTPS). Render services for Project 2 are deleted after Azure passes its smoke tests | Render free: 0.15 CPU (172 chars/s) and sleeps after 15 min; the free Azure VM is ~10× the CPU, always on, so retention really holds |
+| D29 | Frontend dev dependencies approved: `vitest`, `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event`, `jsdom`. No UI component library; plain CSS | Component tests for the player and polling logic without a heavy framework |
 | D25 | A held-out test set (`testset_heldout/`) is never inspected during development; its first-run score is the honest number reported in the viva | Dev-set scores are inflated because the rules were tuned while looking at those files |
 
 ## Change log
@@ -39,4 +40,5 @@ Locked decisions. Changing any of these needs an explicit new entry below, not a
 - 2026-10-16 — D25 added and Phase 1 implementation rules recorded in SPEC §6.3.6 (revision 3).
 - 2026-10-17 — Render spike done; D26, D27 added; SPEC revision 5.
 - 2026-10-17 — D28: backend moves to an Azure VM; D14, D19, D26 updated; SPEC revision 6.
+- 2026-10-18 — Azure VM verified (600–720 chars/s, 131 MB peak, 0 retries). D26 finalised (no Piper on the server); D29 added. Render service deleted.
 - 2026-10-16 — Held-out first run (commit 1dbf9ac): F1 0.99 (78/79), rejects 4/4, noise 0. SPEC revision 4: compound-hyphen rule narrowed, bare-number title prefix stripped in evaluation.

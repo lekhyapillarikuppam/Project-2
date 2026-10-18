@@ -1,0 +1,36 @@
+.connection-banner-slot:empty {
+  display: none;
+}
+
+.connection-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 0 0 20px;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  background: var(--warning-soft);
+  border: 1px solid var(--line-strong);
+  font-weight: 500;
+}
+
+.connection-banner__text {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.connection-banner__dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: banner-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes banner-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}

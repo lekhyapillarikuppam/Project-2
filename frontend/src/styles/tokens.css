@@ -1,0 +1,60 @@
+/* Design tokens: every colour, font and size the app uses. Dark mode follows the system setting. */
+:root {
+  color-scheme: light;
+
+  --paper: #f6f1e7;
+  --surface: #fffdf8;
+  --surface-2: #efe8da;
+  --ink: #1e1d1a;
+  --ink-muted: #5a554b;
+  --line: #ddd3c1;
+  --line-strong: #c4b8a3;
+
+  --accent: #1d6b66;
+  --accent-strong: #155651;
+  --on-accent: #ffffff;
+  --accent-soft: #d9ebe8;
+
+  --danger: #9b2c1f;
+  --danger-soft: #f6e1dc;
+  --warning-soft: #f3ead3;
+
+  --shadow: 0 1px 2px rgb(60 45 20 / 6%), 0 8px 24px rgb(60 45 20 / 8%);
+  --shadow-bar: 0 -6px 24px rgb(60 45 20 / 10%);
+
+  --font-serif: 'Literata', Georgia, 'Times New Roman', serif;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --radius: 10px;
+  --radius-small: 6px;
+  --content-width: 760px;
+  --gutter: 16px;
+  --touch: 44px;
+  --player-height: 96px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --paper: #15171a;
+    --surface: #1d2024;
+    --surface-2: #262a2f;
+    --ink: #ece6da;
+    --ink-muted: #aaa397;
+    --line: #363a40;
+    --line-strong: #4a4f57;
+
+    --accent: #6cc3b9;
+    --accent-strong: #8fd5cc;
+    --on-accent: #0d1f1d;
+    --accent-soft: #24413e;
+
+    --danger: #f08e7f;
+    --danger-soft: #3a2522;
+    --warning-soft: #33301f;
+
+    --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 30%);
+    --shadow-bar: 0 -6px 24px rgb(0 0 0 / 40%);
+  }
+}

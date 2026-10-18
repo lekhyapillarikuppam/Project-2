@@ -1,0 +1,85 @@
+.book-page--with-player {
+  padding-bottom: calc(var(--player-height) + 24px);
+}
+
+.book-page__loading {
+  margin-top: 12vh;
+  text-align: center;
+  color: var(--ink-muted);
+}
+
+.book-header {
+  margin: 20px 0;
+}
+
+.book-header__eyebrow {
+  margin: 0 0 4px;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.book-header__title {
+  overflow-wrap: anywhere;
+}
+
+.book-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.status-pill {
+  padding: 2px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.status-pill--done,
+.status-pill--partial {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.status-pill--failed {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.book-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 8px 0 20px;
+}
+
+.book-actions__note {
+  color: var(--ink-muted);
+}
+
+.book-page__warnings {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.book-page__temporary {
+  margin-top: 24px;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 860px) {
+  .book-page--with-player {
+    padding-bottom: calc(var(--player-height) + 56px);
+  }
+}
+
