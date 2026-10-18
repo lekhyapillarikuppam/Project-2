@@ -916,23 +916,43 @@
  ],
  "cast": {
   "Evan MacIan": {
-   "aliases": [],
+   "aliases": [
+    "Evan",
+    "MacIan",
+    "the Highlander",
+    "the tall Scotsman"
+   ],
    "gender": "male"
   },
   "James Turnbull": {
-   "aliases": [],
+   "aliases": [
+    "Turnbull",
+    "the secularist",
+    "the red-bearded man"
+   ],
    "gender": "male"
   },
   "Mr. Gordon": {
-   "aliases": [],
+   "aliases": [
+    "Gordon",
+    "the shopman",
+    "the pawnbroker",
+    "the dealer"
+   ],
    "gender": "male"
   },
   "cabman": {
-   "aliases": [],
+   "aliases": [
+    "cabby",
+    "cabman",
+    "driver"
+   ],
    "gender": "male"
   },
   "policeman": {
-   "aliases": [],
+   "aliases": [
+    "police officer"
+   ],
    "gender": "male"
   }
  },

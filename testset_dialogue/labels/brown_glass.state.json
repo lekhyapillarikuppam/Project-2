@@ -1499,7 +1499,9 @@
   },
   "Dr Hood": {
    "aliases": [
-    "Scientist"
+    "Scientist",
+    "Dr Orion Hood",
+    "Orion Hood"
    ],
    "gender": "male"
   },
@@ -1510,7 +1512,9 @@
    "gender": "female"
   },
   "James Todhunter": {
-   "aliases": [],
+   "aliases": [
+    "Todhunter"
+   ],
    "gender": "male"
   },
   "Mrs MacNab": {
@@ -1524,6 +1528,6 @@
    "gender": "male"
   }
  },
- "cursor": 12,
+ "cursor": 13,
  "done": false
 }
