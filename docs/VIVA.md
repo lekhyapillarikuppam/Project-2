@@ -1,6 +1,7 @@
 # Viva preparation — Readaloud (AI-Powered Audiobook Generator)
 
 Live site: <https://project-2-eight-azure.vercel.app> · sample: <https://project-2-eight-azure.vercel.app/sample> ·
+character-voices sample: <https://project-2-eight-azure.vercel.app/sample/characters> ·
 backend health: https://lekhya-audiobook.centralindia.cloudapp.azure.com/api/health
 
 ---
@@ -35,6 +36,24 @@ only store *positioned text on pages*.
 - On a free Azure student VM it narrates 600–720 characters per second: *Alice in Wonderland*
   (2 h 36 min of audio) is ready in about 3 minutes, using about 130 MB of memory.
 
+### v2 in one minute: character voices
+
+**What.** An opt-in mode where each main character of a novel is read in their own voice and the
+narrator reads the rest. Sample: `/sample/characters` (Alice, chapter 7: Alice, the Hatter, the
+March Hare and the Dormouse each have a voice).
+
+**How.**
+1. Find the dialogue: quote spans per paragraph, broken quotes kept as one utterance.
+2. Work out who speaks each utterance with an LLM (Groq, `qwen/qwen3.8-27b`) on ~1,200-word
+   windows, with a rule-based fallback (speech tags, pronouns, turn-taking) whenever the LLM fails.
+3. Merge character names into a cast and give voices lazily, chapter by chapter (D41).
+4. Narrate with one voice per chunk and a 150 ms pause between speakers.
+
+**Results.** Voice accuracy (the share of lines read in the right voice): **0.99 on the dev chapters,
+0.83 on the held-out chapter (first and only run)**; the rule-based baseline gets 0.71 / 0.48. Quote
+detection F1 is 0.99 on both. The model and method were chosen by a rule written down before any
+results (D39).
+
 ---
 
 ## 2. Where is the AI / data science?
@@ -64,6 +83,22 @@ only store *positioned text on pages*.
     different settings.
   - Those numbers caused real decisions: moving to Azure (D28), edge-only narration on the server
     (D26), and a faster assembly step.
+
+### Where is the AI in v2?
+- **LLM speaker attribution vs a rule baseline.** The same task is solved two ways: hand-written
+  rules (speech tags like `said Alice`, pronoun tags resolved to the one named character of that
+  gender, turn-taking in back-and-forth dialogue) and an LLM that reads each window with numbered
+  quotes (`[Q3]‘…’`) and returns JSON. The rules are also the fallback, so the system degrades
+  instead of failing.
+- **A measured comparison of two LLMs.** qwen3.8-27b and gpt-oss-120b, each used alone and with
+  "baseline override" (an explicit tag beats the LLM): five candidates, scored on the same labelled
+  chapters, with tokens and latency recorded for every request.
+- **Evaluation design.** Hand-labelled chapters (a labelling tool and a label lint for consistency),
+  three metrics (quote detection F1, attribution accuracy split explicit/implicit, and voice accuracy
+  as heard), a selection rule fixed before any results, and disk-cached LLM answers so re-scoring is
+  free and repeatable.
+- **Held-out honesty.** One chapter from a different book was never opened; it was evaluated once,
+  after everything was frozen, and that number (0.83) is what I report, not the dev 0.99.
 
 ---
 
@@ -166,9 +201,11 @@ only store *positioned text on pages*.
 
 14. **What does v2 add?**
     - One voice per character: detect dialogue, use a free LLM to attribute each line to a speaker,
-      merge aliases, and give each character a distinct voice.
-    - The data model already has a `speaker` field on every segment for this (D11).
-    - Attribution accuracy would be measured on a labelled chapter.
+      merge aliases, and give each character a distinct voice. It is opt-in; single narrator is
+      unchanged.
+    - The data model already had a `speaker` field on every segment for this (D11), so v1 needed no
+      data-model change.
+    - Attribution is measured on labelled chapters: 0.99 voice accuracy on dev, 0.83 held-out.
 
 15. **How do you know where a chapter starts in a PDF without an outline?**
     - Body size = the most common font size by character count.
@@ -190,7 +227,7 @@ only store *positioned text on pages*.
     chapter, 4 chunks are narrated in parallel.
 
 18. **How did you test it?**
-    - 238 backend tests (pytest) and 33 frontend tests (Vitest + Testing Library).
+    - 369 backend tests (pytest) and 42 frontend tests (Vitest + Testing Library).
     - Two evaluation sets.
     - A smoke script that runs a whole book through the live API.
     - Manual checks on desktop and phone, and Lighthouse accessibility (100).
@@ -207,6 +244,85 @@ only store *positioned text on pages*.
       hyphenated form appears elsewhere in the document.
     - Render's proxy dropping keep-alive connections, which led to retrying GETs in the client.
 
+### v2 questions
+
+21. **Why does the LLM beat the rules so clearly on "The Absence of Mr Glass" (0.99 vs 0.38)?**
+    - Chesterton tags speakers with descriptions, not names: "said the priest", "the doctor
+      answered", "said the girl shortly". The rules see an explicit tag but can't know that "the
+      priest" is Father Brown, so the line gets its own wrong voice.
+    - The LLM reads the context and maps epithets to characters. In *Alice* the tags are mostly
+      names ("said the Hatter"), so the rules already reach 0.91 there.
+
+22. **Why did "LLM + baseline override" make things worse?**
+    - The idea was that an explicit `said X` tag should beat the LLM. But "explicit" to the rules
+      includes epithets, so the override replaced the LLM's correct "Father Brown" with "the priest".
+    - Dev: override·qwen 0.87 vs llm·qwen 0.99; on the held-out chapter 0.67 vs 0.83. Attribution
+      accuracy stayed similar; the loss is in voices, because epithets become separate characters.
+
+23. **Why is voice accuracy the selection metric, not attribution accuracy?**
+    - The listener hears voices, not names. Two different minor characters sharing the minor voice,
+      or an unknown line read by the narrator, sound right even when the name differs, and a correct
+      name with the wrong voice sounds wrong.
+    - It also measures the whole system (attribution, cast merging and casting together).
+
+24. **How did Groq's rate limits shape the design?**
+    - The free tier allows 8,000 tokens and, for this model, **1,000 completion tokens per minute**:
+      about one window per minute. A 100,000-word book needs 30–60 minutes of attribution.
+    - So: attribution runs one chapter ahead of narration (D37), listening starts after chapter 1,
+      the client paces both token budgets instead of hitting 429s (D42), responses are cached per
+      job, and there is a daily cap of 800 requests.
+
+25. **What happens when Groq is down or out of budget?**
+    - The affected windows use the rule-based baseline; the job never fails because of the LLM
+      (D34). The chapter is marked `baseline` or `mixed`, the book page notes it, and a warning says
+      how many chapters used the simpler method.
+    - Tested with a fake Groq returning HTTP 500: every chapter becomes `baseline`, the job finishes.
+
+26. **Why is the grouping score below the 0.9 target on Alice, and why doesn't it matter much?**
+    - Grouping checks that the pieces of one utterance (a broken quote) are grouped the same way as in
+      the labels. On Alice it is 0.79 (dev micro 0.90).
+    - Most of the mismatches are broken quotes by *one* speaker (`‘I do,’ Alice hastily replied;
+      ‘at least…’`) that the labels split and the segmenter joins. Same speaker, so the voice is the
+      same. What would matter is joining two *different* speakers; that happens in 1 of 43 Alice
+      multi-span utterances (2%), and I fixed the one real case with a general rule.
+
+27. **How did you keep the labels consistent?**
+    - Written conventions (D38): thoughts belong to the thinker, group speech is UNKNOWN, quoted
+      writing is not an utterance, spans include the quote marks.
+    - A label lint checks the files without the segmenter: overlapping spans, spans that don't start
+      or end at a quote mark, spans that may contain narration, and quotes dropped when a span was
+      narrowed. It found real labelling errors before evaluation.
+
+28. **Why two LLMs, and why these two?**
+    - They were the two capable models on the free Groq key (D32). qwen3.8-27b won on voice accuracy
+      and used fewer tokens and half the latency; gpt-oss-120b has to "think" (at least at `low`
+      effort), which cost 519 of its 895 completion tokens on one window.
+
+29. **Did you check that "thinking off" really works?**
+    - Yes, with real requests rather than trusting docs: qwen gave 652 completion tokens with
+      thinking on, off or unset, and never returned reasoning text, so on Groq it doesn't think at all.
+      gpt-oss rejects `none`; at `low` it reasons.
+
+30. **Why is the held-out score so much lower (0.83 vs 0.99)?**
+    - The dev chapters were looked at while improving rules and fixing labels; the held-out chapter
+      never was, so its number is the honest one.
+    - The drop is in implicit lines (no speech tag naming the speaker): 0.67 held-out. Explicit lines
+      stay at 0.96. Long back-and-forth dialogue without tags is where the model still guesses.
+
+31. **How are voices assigned, and why lazily?**
+    - The first version gave voices up front from a rule-based ranking of the whole book. Listening
+      showed the problem: epithets took voice slots and the March Hare got a female voice because the
+      rules couldn't tell its gender.
+    - Now (D41) the rule pass only reserves voices for clearly named, frequent characters; everyone
+      else gets a voice just before the first chapter they speak in, with the LLM's gender, and keeps
+      it. At most 8 distinct voices; one-line characters share the minor voice.
+
+32. **Privacy in character-voices mode?**
+    - The document's text is sent to Groq to find the speakers. The upload page says so next to the
+      option (D36), and the option is off by default.
+    - Groq's free tier states it doesn't train on the data; nothing is stored by us beyond the
+      temporary job folder.
+
 ---
 
 ## 4. Known limitations (say these plainly)
@@ -220,6 +336,21 @@ only store *positioned text on pages*.
 - English only (normalization rules and voice).
 - Scanned PDFs are rejected (no OCR).
 - Jobs are kept in memory: a server restart or redeploy loses running jobs and their audio.
+
+**v2 (character voices):**
+- Implicit lines (no tag naming the speaker) are the weak spot: 0.67 attribution on the held-out
+  chapter.
+- At most 8 distinct voices, given first come first served after the reservations: in the whole
+  *Alice* book the Duchess, Caterpillar, Dormouse and March Hare end up on the shared minor voices,
+  and a character whose gender the LLM leaves unknown gets the minor voice of the larger pool (so the
+  March Hare sounds female in later chapters). A voice never changes once used.
+- Epithets ("the priest") in rule-based fallback windows become separate characters.
+- Slow on long books: ≈ 1 window per minute on the free tier (30–60 min of attribution for 100,000
+  words); later chapters can wait for their speakers.
+- Depends on a free third-party service and sends the text to it; when it is down, the rules take
+  over with lower accuracy.
+- Evaluated on three chapters only (two dev, one held-out): the numbers are indicative, not precise.
+- Production memory during a characters job on the VM: _to be filled in after the production check_.
 
 ---
 
@@ -237,6 +368,16 @@ only store *positioned text on pages*.
 | 2:05 | Upload `08_scanned.pdf` | "Scanned documents are detected and rejected with a clear message: no OCR in this version." |
 | 2:25 | Open the README's Evaluation table | "Chapter detection is evaluated on labelled documents: 0.99 F1 on a held-out set I never looked at during development." |
 | 2:50 | Back to the Alice tab | "By now the whole book is nearly done: two and a half hours of audio in about three minutes." |
+
+**Character-voices segment (+1:30, after the main demo):**
+
+| Time | Do | Say |
+|---|---|---|
+| 3:00 | Open `/sample/characters`, play from the start of the tea party | "This is v2: each character has a voice. Alice, the Hatter, the March Hare and the Dormouse; the narrator reads the rest." |
+| 3:20 | Scroll to the **Cast** list | "The cast comes from an LLM that reads the text and says who speaks each line; voices are given chapter by chapter." |
+| 3:35 | Start page: choose **Character voices (beta)**, upload `05_styles.docx` | "It's opt-in, and the page says the text is sent to Groq." |
+| 3:50 | Show "Finding the characters… (window n of N)" | "Attribution runs one chapter ahead of narration, because the free tier allows about one window a minute." |
+| 4:10 | Open the README's attribution table | "I compared two LLMs against a rule baseline with a selection rule fixed in advance: 0.99 voice accuracy on dev, 0.83 on a held-out chapter I ran once." |
 
 **If the network is bad:**
 - The sample (`/sample`) plays without the backend, and so does a locally running copy

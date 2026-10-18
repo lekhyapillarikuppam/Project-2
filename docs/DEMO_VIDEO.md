@@ -1,4 +1,4 @@
-# Demo video — shot list (~3 minutes)
+# Demo video — shot list (~3½ minutes)
 
 Record at 1280×800 or larger, browser zoom 100%, light mode, the Alice upload started on camera.
 Close other tabs and notifications. Speak calmly; cut long waits in editing.
@@ -14,7 +14,8 @@ Close other tabs and notifications. Speak calmly; cut long waits in editing.
 | 7 | 1:50–2:05 | Chapter list | Click a chapter's download icon; show the file name in the downloads bar | "Each chapter downloads as an MP3 with a readable name. When everything is done, there's a full-book download too." |
 | 8 | 2:05–2:20 | Start page (new tab) | Upload `08_scanned.pdf`; the red message appears | "A scanned PDF has no real text, so it's rejected with a clear message instead of producing silence." |
 | 9 | 2:20–2:45 | GitHub README, Evaluation and Performance tables | Scroll slowly | "Chapter detection was evaluated on hand-labelled documents: 0.99 F1 on a held-out set I never looked at while building it. On a free Azure VM it narrates about 700 characters a second." |
-| 10 | 2:45–3:00 | Back to the Alice tab | Show *Ready*, **Download full book**, total length 2:35:47 | "And the whole book is done: two and a half hours of audio in about three minutes. Thanks for watching." |
+| 10 | 2:45–3:00 | Back to the Alice tab | Show *Ready*, **Download full book**, total length 2:35:47 | "And the whole book is done: two and a half hours of audio in about three minutes." |
+| 11 | 3:00–3:25 | `/sample/characters` | Click **Hear a sample with character voices** on the sample page; play from the start of the tea party for ~12 s, then scroll to the **Cast** list | "Version 2 adds character voices: an LLM works out who is speaking each line, and Alice, the Hatter, the March Hare and the Dormouse each get their own voice. Thanks for watching." |
 
 Fallback: if the live upload is slow on the day, record shots 3–7 against `npm run dev` locally and
 say so in the narration, or cut from shot 5 to a finished book uploaded earlier.
