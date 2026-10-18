@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dialogue Labeller</title>
+<style>
+  :root { --bg:#fafaf7; --fg:#1d1d1b; --muted:#6b6b66; --line:#d9d8d0; --panel:#ffffff;
+          --hl:#ffe08a; --hl-other:#e8eef9; --hl-no:#eee; --accent:#2a5bd7; --bad:#b3261e; --good:#1e7a3a; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, sans-serif; }
+  header { display:flex; gap:16px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); position:sticky; top:0; z-index:2; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; }
+  #progress { color:var(--muted); }
+  #saved { color:var(--muted); font-size:13px; }
+  main { display:grid; grid-template-columns: minmax(0,1fr) 320px; gap:16px; padding:16px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  section, aside { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:12px 14px; }
+  .para { margin:0 0 10px; padding:8px 10px; border-radius:4px; white-space:pre-wrap; }
+  .para.ctx { color:var(--muted); font-size:14px; }
+  .para.cur { border:1px solid var(--line); }
+  .para .pn { font-size:11px; color:var(--muted); user-select:none; margin-right:6px; }
+  mark { background:var(--hl-other); color:inherit; border-radius:2px; }
+  mark.cur { background:var(--hl); outline:1px solid #d9a400; }
+  mark.no { background:var(--hl-no); text-decoration:line-through; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:8px 0; }
+  button { font:inherit; padding:4px 10px; border:1px solid var(--line); border-radius:4px; background:#f3f3ef; cursor:pointer; }
+  button:hover { background:#e9e9e3; }
+  button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.danger.on { background:var(--bad); border-color:var(--bad); }
+  button .k { font-size:11px; opacity:.7; margin-right:4px; }
+  input[type=text] { font:inherit; padding:4px 8px; border:1px solid var(--line); border-radius:4px; }
+  #status { font-weight:600; }
+  #status.quote { color:var(--good); } #status.not_quote { color:var(--muted); } #status.undecided { color:var(--bad); }
+  .cast-row { display:grid; grid-template-columns: 1fr 86px 24px; gap:4px; margin-bottom:6px; align-items:center; }
+  .cast-row input, .cast-row select { min-width:0; width:100%; }
+  .cast-row .aliases { grid-column: 1 / 4; font-size:13px; }
+  .cast-row .count { font-size:12px; color:var(--muted); }
+  #errors { color:var(--bad); font-size:13px; white-space:pre-wrap; max-height:200px; overflow:auto; }
+  #chapter { max-height:60vh; overflow:auto; margin-top:8px; }
+  details summary { cursor:pointer; color:var(--accent); }
+  .hint { color:var(--muted); font-size:12px; }
+  kbd { border:1px solid var(--line); border-radius:3px; padding:0 4px; font-size:12px; background:#f6f6f2; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Loading…</h1>
+  <span id="progress"></span>
+  <span id="saved"></span>
+  <span style="flex:1"></span>
+  <button id="nextUndecided">Next undecided</button>
+  <button id="done">Export / Done</button>
+</header>
+<main>
+  <div>
+    <section>
+      <div class="row"><span id="where"></span><span id="status"></span><span id="origin" class="hint"></span></div>
+      <div id="view"></div>
+      <div class="row">
+        <button id="prev"><span class="k">⌫</span>Previous</button>
+        <button id="next"><span class="k">Enter</span>Next</button>
+        <button id="notQuote" class="danger"><span class="k">N</span>Not a quote</button>
+        <button id="explicit"><span class="k">E</span>Explicit</button>
+        <button id="same"><span class="k">S</span>Same utterance as previous</button>
+      </div>
+      <div class="row" id="speakerKeys"></div>
+      <div class="row">
+        <input type="text" id="speakerInput" list="castNames" placeholder="Speaker (type, Enter)" autocomplete="off">
+        <datalist id="castNames"></datalist>
+        <span id="addNew" hidden>Add <b id="addName"></b> as
+          <button data-g="female">female</button><button data-g="male">male</button><button data-g="unknown">unknown</button></span>
+      </div>
+      <div class="row">
+        <button id="setSpan" disabled>Set span to selection</button>
+        <button id="addQuote" disabled>Add selection as missed quote</button>
+        <span class="hint">Select text with the mouse in any paragraph (here or in the full chapter below).</span>
+      </div>
+      <p class="hint">Keys: <kbd>1</kbd>–<kbd>9</kbd> speaker · <kbd>0</kbd> UNKNOWN · <kbd>N</kbd> not a quote · <kbd>E</kbd> explicit · <kbd>S</kbd> same utterance · <kbd>Enter</kbd> next · <kbd>Backspace</kbd> previous · <kbd>/</kbd> type a speaker</p>
+    </section>
+    <section style="margin-top:16px">
+      <details id="chapterBox"><summary>Full chapter (click a highlight to jump to it)</summary><div id="chapter"></div></details>
+    </section>
+  </div>
+  <aside>
+    <h2 style="font-size:15px;margin:0 0 8px">Cast</h2>
+    <div id="cast"></div>
+    <div class="row">
+      <input type="text" id="newName" placeholder="New character" style="flex:1">
+      <select id="newGender"><option>female</option><option>male</option><option>unknown</option></select>
+      <button id="addChar">Add</button>
+    </div>
+    <p class="hint">Aliases are comma-separated (e.g. <i>the Hatter, Hatter</i>). The speaker box also accepts aliases. Use <b>UNKNOWN</b> (key <kbd>0</kbd>) when the text does not tell who speaks.</p>
+    <div id="errors"></div>
+  </aside>
+</main>
+<script>
+"use strict";
+let S = null;          // server state: paragraphs, items, cast, cursor, unknown, ...
+let order = [];        // top speaker order (frozen between navigations)
+let selection = null;  // {p, s, e} from the last mouse selection inside a paragraph
+let saveTimer = null;
+const $ = (id) => document.getElementById(id);
+
+function items() { return S.items; }
+function sortItems() { S.items.sort((a, b) => a.p - b.p || a.s - b.s || a.e - b.e); }
+function cur() { return S.items[S.cursor]; }
+
+function escapeHtml(t) { return t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]); }
+
+function lineCounts() {
+  const n = {};
+  for (const it of S.items) if (it.decision === "quote" && it.speaker) n[it.speaker] = (n[it.speaker] || 0) + 1;
+  return n;
+}
+function refreshOrder() {
+  const n = lineCounts();
+  const names = Object.keys(S.cast);
+  order = names.map((name, i) => [name, i]).sort((a, b) => (n[b[0]] || 0) - (n[a[0]] || 0) || a[1] - b[1]).map((x) => x[0]).slice(0, 9);
+}
+
+function resolveName(text) {
+  const t = text.trim().toLowerCase();
+  if (!t) return null;
+  if (t === S.unknown.toLowerCase()) return S.unknown;
+  for (const [name, info] of Object.entries(S.cast)) {
+    if (name.toLowerCase() === t) return name;
+    if ((info.aliases || []).some((a) => a.toLowerCase() === t)) return name;
+  }
+  return null;
+}
+
+function previousQuote(idx) {
+  for (let i = idx - 1; i >= 0; i--) if (S.items[i].decision === "quote") return S.items[i];
+  return null;
+}
+function effectiveSpeaker(idx) {
+  // a "same utterance" item speaks with the previous quote's speaker
+  for (let i = idx; i >= 0; i--) {
+    const it = S.items[i];
+    if (it.decision === "quote" && !it.same) return it.speaker;
+  }
+  return null;
+}
+
+// ---------- rendering ----------
+function paragraphHtml(p, withNumber) {
+  const text = S.paragraphs[p];
+  const spans = S.items.map((it, i) => ({ it, i })).filter((x) => x.it.p === p).sort((a, b) => a.it.s - b.it.s);
+  let html = withNumber ? `<span class="pn">¶${p}</span>` : "";
+  let pos = 0;
+  for (const { it, i } of spans) {
+    if (it.s < pos) continue; // overlapping spans: show the first
+    html += escapeHtml(text.slice(pos, it.s));
+    const cls = i === S.cursor ? "cur" : it.decision === "not_quote" ? "no" : "";
+    html += `<mark class="${cls}" data-i="${i}">${escapeHtml(text.slice(it.s, it.e))}</mark>`;
+    pos = it.e;
+  }
+  return html + escapeHtml(text.slice(pos));
+}
+
+function render() {
+  const it = cur();
+  const decided = S.items.filter((x) => x.decision !== null).length;
+  $("title").textContent = `${S.name} — ${S.title}`;
+  $("progress").textContent = `${decided} / ${S.items.length} decided`;
+  $("where").textContent = it ? `#${S.cursor + 1} of ${S.items.length} · ¶${it.p}` : "no items";
+  if (!it) { $("view").innerHTML = ""; renderCast(); return; }
+  const st = it.decision || "undecided";
+  const spk = it.decision === "quote" ? (it.same ? `same utterance → ${effectiveSpeaker(S.cursor) || "?"}` : it.speaker || "no speaker yet") : "";
+  $("status").className = st;
+  $("status").textContent = st === "quote" ? `quote: ${spk}` : st === "not_quote" ? "not a quote" : "undecided";
+  $("origin").textContent = it.origin === "added" ? "(added by you)" : it.hint ? "(speech tag nearby)" : "";
+  let html = "";
+  if (it.p > 0) html += `<p class="para ctx" data-p="${it.p - 1}">${paragraphHtml(it.p - 1, true)}</p>`;
+  html += `<p class="para cur" data-p="${it.p}">${paragraphHtml(it.p, true)}</p>`;
+  if (it.p + 1 < S.paragraphs.length) html += `<p class="para ctx" data-p="${it.p + 1}">${paragraphHtml(it.p + 1, true)}</p>`;
+  $("view").innerHTML = html;
+  $("notQuote").classList.toggle("on", it.decision === "not_quote");
+  $("explicit").classList.toggle("on", !!it.explicit);
+  $("same").classList.toggle("on", !!it.same);
+  let keys = order.map((name, k) => `<button data-speaker="${escapeHtml(name)}" class="${it.decision === "quote" && !it.same && it.speaker === name ? "on" : ""}"><span class="k">${k + 1}</span>${escapeHtml(name)}</button>`).join("");
+  keys += `<button data-speaker="${S.unknown}" class="${it.decision === "quote" && it.speaker === S.unknown ? "on" : ""}"><span class="k">0</span>${S.unknown}</button>`;
+  $("speakerKeys").innerHTML = keys;
+  if ($("chapterBox").open) renderChapter();
+  renderCast();
+  updateSelectionButtons();
+}
+
+function renderChapter() {
+  $("chapter").innerHTML = S.paragraphs.map((_, p) => `<p class="para" data-p="${p}">${paragraphHtml(p, true)}</p>`).join("");
+}
+
+function renderCast() {
+  const n = lineCounts();
+  $("castNames").innerHTML = [S.unknown, ...Object.keys(S.cast), ...Object.values(S.cast).flatMap((c) => c.aliases || [])]
+    .map((v) => `<option value="${escapeHtml(v)}">`).join("");
+  $("cast").innerHTML = Object.entries(S.cast).map(([name, info]) => `
+    <div class="cast-row" data-name="${escapeHtml(name)}">
+      <input type="text" class="cname" value="${escapeHtml(name)}" title="rename">
+      <select class="cgender">${["female", "male", "unknown"].map((g) => `<option ${g === info.gender ? "selected" : ""}>${g}</option>`).join("")}</select>
+      <button class="cdel" title="remove (only when unused)">×</button>
+      <input type="text" class="aliases" value="${escapeHtml((info.aliases || []).join(", "))}" placeholder="aliases">
+      <span class="count">${n[name] || 0} lines</span>
+    </div>`).join("");
+}
+
+// ---------- saving ----------
+function changed() {
+  sortCursorSafe();
+  render();
+  $("saved").textContent = "saving…";
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, 150);
+}
+async function save() {
+  try {
+    const r = await fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: S.items, cast: S.cast, cursor: S.cursor }) });
+    const j = await r.json();
+    $("saved").textContent = j.ok ? "saved" : "save failed";
+  } catch (e) { $("saved").textContent = "save failed: " + e; }
+}
+function sortCursorSafe() {
+  const it = cur();
+  sortItems();
+  if (it) S.cursor = S.items.indexOf(it);
+}
+
+// ---------- actions ----------
+function go(delta) {
+  if (!S.items.length) return;
+  S.cursor = Math.max(0, Math.min(S.items.length - 1, S.cursor + delta));
+  refreshOrder(); selection = null; changed();
+  document.querySelector(".para.cur")?.scrollIntoView({ block: "nearest" });
+}
+function setSpeaker(name) {
+  const it = cur(); if (!it) return;
+  it.decision = "quote"; it.speaker = name; it.same = false;
+  changed();
+}
+function toggleNotQuote() {
+  const it = cur(); if (!it) return;
+  it.decision = it.decision === "not_quote" ? null : "not_quote";
+  changed();
+}
+function toggleExplicit() { const it = cur(); if (!it) return; it.explicit = !it.explicit; changed(); }
+function toggleSame() {
+  const it = cur(); if (!it) return;
+  if (!it.same && !previousQuote(S.cursor)) { $("errors").textContent = "There is no earlier quote to join."; return; }
+  it.same = !it.same;
+  if (it.same) { it.decision = "quote"; it.speaker = null; }
+  changed();
+}
+function nextUndecided() {
+  const n = S.items.length;
+  for (let k = 1; k <= n; k++) {
+    const i = (S.cursor + k) % n;
+    if (S.items[i].decision === null) { S.cursor = i; refreshOrder(); changed(); return; }
+  }
+}
+function addCharacter(name, gender) {
+  name = name.trim();
+  if (!name || name === S.unknown || S.cast[name] || resolveName(name)) return resolveName(name);
+  S.cast[name] = { aliases: [], gender };
+  refreshOrder();
+  return name;
+}
+
+// ---------- selection (span adjust / add missed quote) ----------
+function offsetIn(paraEl, node, offset) {
+  const r = document.createRange();
+  r.selectNodeContents(paraEl);
+  r.setEnd(node, offset);
+  const num = paraEl.querySelector(".pn");
+  return r.toString().length - (num ? num.textContent.length : 0);
+}
+function readSelection() {
+  selection = null;
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return updateSelectionButtons();
+  const range = sel.getRangeAt(0);
+  const pa = range.startContainer.parentElement?.closest(".para");
+  const pb = range.endContainer.parentElement?.closest(".para");
+  if (!pa || pa !== pb) return updateSelectionButtons();
+  const p = Number(pa.dataset.p);
+  let s = offsetIn(pa, range.startContainer, range.startOffset);
+  let e = offsetIn(pa, range.endContainer, range.endOffset);
+  const text = S.paragraphs[p];
+  s = Math.max(0, s); e = Math.min(text.length, e);
+  while (s < e && /\s/.test(text[s])) s++;
+  while (e > s && /\s/.test(text[e - 1])) e--;
+  if (e > s) selection = { p, s, e };
+  updateSelectionButtons();
+}
+function updateSelectionButtons() {
+  const it = S && cur();
+  $("setSpan").disabled = !(selection && it && selection.p === it.p);
+  $("addQuote").disabled = !selection;
+  $("setSpan").title = $("addQuote").title = selection ? `¶${selection.p} [${selection.s}, ${selection.e})` : "";
+}
+function setSpan() {
+  const it = cur(); if (!it || !selection || selection.p !== it.p) return;
+  it.s = selection.s; it.e = selection.e;
+  selection = null; window.getSelection().removeAllRanges(); changed();
+}
+function addQuote() {
+  if (!selection) return;
+  const it = { key: `a${selection.p}:${selection.s}:${selection.e}:${Date.now()}`, p: selection.p, s: selection.s, e: selection.e,
+               origin: "added", decision: null, speaker: null, explicit: false, hint: false, same: false };
+  S.items.push(it); sortItems(); S.cursor = S.items.indexOf(it);
+  selection = null; window.getSelection().removeAllRanges(); refreshOrder(); changed();
+}
+
+// ---------- events ----------
+document.addEventListener("mouseup", () => setTimeout(readSelection, 0));
+document.addEventListener("click", (ev) => {
+  const m = ev.target.closest("mark[data-i]");
+  if (m && window.getSelection().isCollapsed && ev.target.closest("#chapter")) { S.cursor = Number(m.dataset.i); refreshOrder(); changed(); window.scrollTo({ top: 0 }); }
+  const b = ev.target.closest("button[data-speaker]");
+  if (b) setSpeaker(b.dataset.speaker);
+});
+$("prev").onclick = () => go(-1);
+$("next").onclick = () => go(1);
+$("notQuote").onclick = toggleNotQuote;
+$("explicit").onclick = toggleExplicit;
+$("same").onclick = toggleSame;
+$("nextUndecided").onclick = nextUndecided;
+$("setSpan").onclick = setSpan;
+$("addQuote").onclick = addQuote;
+$("chapterBox").addEventListener("toggle", () => { if ($("chapterBox").open) renderChapter(); });
+
+$("speakerInput").addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter") { $("addNew").hidden = true; return; }
+  ev.preventDefault();
+  const raw = ev.target.value.trim();
+  const name = resolveName(raw);
+  if (name) { setSpeaker(name); ev.target.value = ""; $("addNew").hidden = true; ev.target.blur(); }
+  else if (raw) { $("addName").textContent = raw; $("addNew").hidden = false; }
+});
+$("addNew").addEventListener("click", (ev) => {
+  const g = ev.target.dataset.g; if (!g) return;
+  const name = addCharacter($("speakerInput").value, g);
+  $("speakerInput").value = ""; $("addNew").hidden = true;
+  if (name) setSpeaker(name);
+});
+$("addChar").onclick = () => { if (addCharacter($("newName").value, $("newGender").value)) { $("newName").value = ""; changed(); } };
+
+$("cast").addEventListener("change", (ev) => {
+  const row = ev.target.closest(".cast-row"); if (!row) return;
+  const old = row.dataset.name;
+  if (ev.target.classList.contains("cgender")) S.cast[old].gender = ev.target.value;
+  if (ev.target.classList.contains("aliases")) S.cast[old].aliases = ev.target.value.split(",").map((a) => a.trim()).filter(Boolean);
+  if (ev.target.classList.contains("cname")) {
+    const nu = ev.target.value.trim();
+    if (!nu || nu === S.unknown || (nu !== old && S.cast[nu])) { ev.target.value = old; return; }
+    const rebuilt = {};
+    for (const [k, v] of Object.entries(S.cast)) rebuilt[k === old ? nu : k] = v;
+    S.cast = rebuilt;
+    for (const it of S.items) if (it.speaker === old) it.speaker = nu;
+    refreshOrder();
+  }
+  changed();
+});
+$("cast").addEventListener("click", (ev) => {
+  if (!ev.target.classList.contains("cdel")) return;
+  const name = ev.target.closest(".cast-row").dataset.name;
+  if (S.items.some((it) => it.decision === "quote" && it.speaker === name)) { $("errors").textContent = `${name} still has lines; reassign them first.`; return; }
+  delete S.cast[name]; refreshOrder(); changed();
+});
+
+$("done").onclick = async () => {
+  clearTimeout(saveTimer); await save();
+  const j = await (await fetch("/api/done", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).json();
+  $("errors").style.color = j.ok ? "var(--good)" : "var(--bad)";
+  $("errors").textContent = j.ok ? `Done: ${j.quotes} quote spans, ${j.utterances} utterances exported.` : `${j.errors.length} problem(s):\n` + j.errors.join("\n");
+};
+
+document.addEventListener("keydown", (ev) => {
+  const tag = ev.target.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  const k = ev.key;
+  if (k >= "1" && k <= "9") { const name = order[Number(k) - 1]; if (name) setSpeaker(name); }
+  else if (k === "0") setSpeaker(S.unknown);
+  else if (k === "n" || k === "N") toggleNotQuote();
+  else if (k === "e" || k === "E") toggleExplicit();
+  else if (k === "s" || k === "S") toggleSame();
+  else if (k === "Enter") go(1);
+  else if (k === "Backspace") go(-1);
+  else if (k === "/" || ev.code === "Slash") setTimeout(() => $("speakerInput").focus(), 0);
+  else return;
+  ev.preventDefault();
+});
+
+(async () => {
+  S = await (await fetch("/api/state")).json();
+  sortCursorSafe();
+  S.cursor = Math.min(S.cursor || 0, Math.max(0, S.items.length - 1));
+  refreshOrder();
+  render();
+  $("saved").textContent = S.done ? "exported" : "";
+})();
+</script>
+</body>
+</html>

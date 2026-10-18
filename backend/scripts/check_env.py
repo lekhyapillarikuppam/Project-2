@@ -1,7 +1,8 @@
 """Phase 0 environment check. Run from backend/:  python scripts/check_env.py
 
-Checks Python version, required packages, ffmpeg/ffprobe, a tiny edge-tts synthesis, and the
-local Piper voice (load the model, synthesize one sentence).
+Checks Python version, required packages, ffmpeg/ffprobe, a tiny edge-tts synthesis, the
+local Piper voice (load the model, synthesize one sentence) and, when GROQ_API_KEY is set, one
+tiny Groq JSON-mode request (v2; a WARN only).
 Exits with code 1 if anything required is missing.
 """
 
@@ -121,6 +122,44 @@ def check_piper() -> None:
         report(False, label, repr(e))
 
 
+GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+
+def check_groq() -> None:
+    """v2 (D32): one tiny JSON-mode request. Skipped with a WARN when no key is configured."""
+    import json
+
+    import httpx
+
+    settings = get_settings()
+    label = f"Groq JSON-mode request ({settings.llm_model})"
+    if not settings.groq_api_key:
+        report(False, label, "GROQ_API_KEY not set; character voices disabled", required=False)
+        return
+    body = {
+        "model": settings.llm_model,
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": "Reply with JSON only."},
+            {"role": "user", "content": 'Return exactly {"ok": true}.'},
+        ],
+    }
+    try:
+        r = httpx.post(
+            GROQ_CHAT_URL, json=body, timeout=30,
+            headers={"Authorization": f"Bearer {settings.groq_api_key}"},
+        )  # fmt: skip
+        if r.status_code != 200:
+            report(False, label, f"HTTP {r.status_code}: {r.text[:200]}", required=False)
+            return
+        content = json.loads(r.json()["choices"][0]["message"]["content"])
+        left = r.headers.get("x-ratelimit-remaining-requests", "?")
+        report(content.get("ok") is True, label, f"reply {content}, requests left today {left}", required=False)
+    except Exception as e:  # noqa: BLE001
+        report(False, label, repr(e), required=False)
+
+
 def main() -> None:
     print("Audiobook Generator — environment check\n")
     check_python()
@@ -129,6 +168,7 @@ def main() -> None:
     check_binary("ffprobe")
     check_edge_tts()
     check_piper()
+    check_groq()
     print()
     if failures:
         print(f"{failures} required check(s) failed.")

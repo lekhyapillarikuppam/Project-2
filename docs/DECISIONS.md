@@ -33,6 +33,12 @@ Locked decisions. Changing any of these needs an explicit new entry below, not a
 | D28 | Backend moves from Render free to an **Azure for Students B2ats v2 VM** (2 vCPU, 1 GiB, always on) running the Docker image behind Caddy (HTTPS). Render services for Project 2 are deleted after Azure passes its smoke tests | Render free: 0.15 CPU (172 chars/s) and sleeps after 15 min; the free Azure VM is ~10× the CPU, always on, so retention really holds |
 | D29 | Frontend dev dependencies approved: `vitest`, `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event`, `jsdom`. No UI component library; plain CSS | Component tests for the player and polling logic without a heavy framework |
 | D30 | Uploads are limited to 10 per client IP per hour (in memory, reset on restart) | The site is public and the VM runs on student credit; the job queue limits load but not one person repeatedly uploading |
+| D31 | v2 character voices is an opt-in mode chosen at upload (`narration_mode=characters`); single narrator stays the default and v1 behaviour is unchanged | User choice; non-fiction gains nothing from it |
+| D32 | Speaker attribution LLM: Groq free tier (Llama 3.3 70B class, model from config) via its OpenAI-compatible API over `httpx`; key only on the server | 30 req/min, 1,000 req/day free, no training on free-tier data; no new SDK dependency |
+| D33 | Unknown or uncertain speakers are read in the narrator voice | A wrong character voice is worse than the neutral narrator |
+| D34 | If the LLM fails, is rate-limited or out of daily budget, the affected windows use the rule-based baseline; the job never fails because of the LLM, and the chapter shows which method was used | Robustness on a free tier |
+| D35 | Attribution is evaluated on 2 dev chapters (Alice ch. 7, "The Absence of Mr Glass") and 1 held-out chapter (*The Ball and the Cross* ch. 3), hand-labelled by the user; baseline vs LLM vs combined; held-out first run reported | Measurable NLP result; same honesty rule as D25 |
+| D36 | Character-voices mode sends the document text to Groq; this is stated on the upload page and in the viva notes | Privacy disclosure |
 | D25 | A held-out test set (`testset_heldout/`) is never inspected during development; its first-run score is the honest number reported in the viva | Dev-set scores are inflated because the rules were tuned while looking at those files |
 
 ## Change log
@@ -43,4 +49,5 @@ Locked decisions. Changing any of these needs an explicit new entry below, not a
 - 2026-10-17 — D28: backend moves to an Azure VM; D14, D19, D26 updated; SPEC revision 6.
 - 2026-10-18 — Azure VM verified (600–720 chars/s, 131 MB peak, 0 retries). D26 finalised (no Piper on the server); D29 added. Render service deleted.
 - 2026-10-18 — Phase 4 frontend done. D30 (per-IP upload limit) added; SPEC revision 7.
+- 2026-10-18 — v1 live (Vercel + Azure). v2 planned: D31–D36; SPEC revision 8 (§15).
 - 2026-10-16 — Held-out first run (commit 1dbf9ac): F1 0.99 (78/79), rejects 4/4, noise 0. SPEC revision 4: compound-hyphen rule narrowed, bare-number title prefix stripped in evaluation.

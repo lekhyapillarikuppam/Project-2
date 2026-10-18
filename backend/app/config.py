@@ -50,6 +50,13 @@ class Settings(BaseSettings):
     tts_max_retries: int = 3
     tts_fallback_after_consecutive_failures: int = 5
 
+    # v2 character voices (SPEC §15, D32); settings only until Phase 6.1
+    groq_api_key: str = ""
+    llm_model: str = "qwen/qwen3.8-27b"
+    llm_max_requests_per_minute: int = 25
+    llm_max_requests_per_day: int = 800
+    max_cast: int = 8
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

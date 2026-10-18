@@ -42,3 +42,7 @@ Thumbs.db
 
 # Deployment secrets (Azure VM)
 deploy/.env
+
+# Dialogue evaluation (v2): chapter texts (public domain) and labels are committed;
+# only the labelling tool's temporary write files are not
+testset_dialogue/labels/*.tmp

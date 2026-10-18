@@ -1,0 +1,153 @@
+{
+  "_comment": "Proposed v2 character-voice pools (SPEC §15.5). Verified against edge-tts 7.3.1 list_voices() on 2026-10-18. Ordered so neighbours differ in accent. The narrator voice (EDGE_VOICE) is excluded.",
+  "edge_tts_version": "7.3.1",
+  "narrator": "en-US-AriaNeural",
+  "female": [
+    {
+      "id": "en-GB-SoniaNeural",
+      "gender": "female",
+      "accent": "British",
+      "label": "Voice 1 (female, British)"
+    },
+    {
+      "id": "en-US-JennyNeural",
+      "gender": "female",
+      "accent": "American",
+      "label": "Voice 2 (female, American)"
+    },
+    {
+      "id": "en-AU-NatashaNeural",
+      "gender": "female",
+      "accent": "Australian",
+      "label": "Voice 3 (female, Australian)"
+    },
+    {
+      "id": "en-IE-EmilyNeural",
+      "gender": "female",
+      "accent": "Irish",
+      "label": "Voice 4 (female, Irish)"
+    },
+    {
+      "id": "en-US-AvaNeural",
+      "gender": "female",
+      "accent": "American",
+      "label": "Voice 5 (female, American)"
+    },
+    {
+      "id": "en-GB-LibbyNeural",
+      "gender": "female",
+      "accent": "British",
+      "label": "Voice 6 (female, British)"
+    },
+    {
+      "id": "en-CA-ClaraNeural",
+      "gender": "female",
+      "accent": "Canadian",
+      "label": "Voice 7 (female, Canadian)"
+    },
+    {
+      "id": "en-NZ-MollyNeural",
+      "gender": "female",
+      "accent": "New Zealand",
+      "label": "Voice 8 (female, New Zealand)"
+    },
+    {
+      "id": "en-US-EmmaNeural",
+      "gender": "female",
+      "accent": "American",
+      "label": "Voice 9 (female, American)"
+    },
+    {
+      "id": "en-IN-NeerjaNeural",
+      "gender": "female",
+      "accent": "Indian",
+      "label": "Voice 10 (female, Indian)"
+    },
+    {
+      "id": "en-ZA-LeahNeural",
+      "gender": "female",
+      "accent": "South African",
+      "label": "Voice 11 (female, South African)"
+    },
+    {
+      "id": "en-US-MichelleNeural",
+      "gender": "female",
+      "accent": "American",
+      "label": "Voice 12 (female, American)"
+    }
+  ],
+  "male": [
+    {
+      "id": "en-GB-RyanNeural",
+      "gender": "male",
+      "accent": "British",
+      "label": "Voice 13 (male, British)"
+    },
+    {
+      "id": "en-US-GuyNeural",
+      "gender": "male",
+      "accent": "American",
+      "label": "Voice 14 (male, American)"
+    },
+    {
+      "id": "en-AU-WilliamMultilingualNeural",
+      "gender": "male",
+      "accent": "Australian",
+      "label": "Voice 15 (male, Australian)"
+    },
+    {
+      "id": "en-IE-ConnorNeural",
+      "gender": "male",
+      "accent": "Irish",
+      "label": "Voice 16 (male, Irish)"
+    },
+    {
+      "id": "en-US-ChristopherNeural",
+      "gender": "male",
+      "accent": "American",
+      "label": "Voice 17 (male, American)"
+    },
+    {
+      "id": "en-GB-ThomasNeural",
+      "gender": "male",
+      "accent": "British",
+      "label": "Voice 18 (male, British)"
+    },
+    {
+      "id": "en-CA-LiamNeural",
+      "gender": "male",
+      "accent": "Canadian",
+      "label": "Voice 19 (male, Canadian)"
+    },
+    {
+      "id": "en-NZ-MitchellNeural",
+      "gender": "male",
+      "accent": "New Zealand",
+      "label": "Voice 20 (male, New Zealand)"
+    },
+    {
+      "id": "en-US-AndrewNeural",
+      "gender": "male",
+      "accent": "American",
+      "label": "Voice 21 (male, American)"
+    },
+    {
+      "id": "en-IN-PrabhatNeural",
+      "gender": "male",
+      "accent": "Indian",
+      "label": "Voice 22 (male, Indian)"
+    },
+    {
+      "id": "en-ZA-LukeNeural",
+      "gender": "male",
+      "accent": "South African",
+      "label": "Voice 23 (male, South African)"
+    },
+    {
+      "id": "en-US-EricNeural",
+      "gender": "male",
+      "accent": "American",
+      "label": "Voice 24 (male, American)"
+    }
+  ]
+}

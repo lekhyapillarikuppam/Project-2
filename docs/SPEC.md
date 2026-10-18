@@ -1,7 +1,7 @@
 # AI-Powered Audiobook Generator — Specification (v1)
 
 Course: UMC301 Applied Data Science and Artificial Intelligence — Project 2
-Status: revision 7 (2026-10-18, Phase 5: public deployment). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
+Status: revision 8 (2026-10-18, v2 character voices specified; v1 live). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
 
 ---
 
@@ -388,12 +388,91 @@ The development set (`testset/`) was inspected while the pipeline was built, so 
 - Render also ran the first real jobs (06: 172 chars/s at 0.15 CPU, no crash); the free tier's 0.15 CPU and 15-minute sleep were the reasons to move (D28).
 - **Azure acceptance check** (Phase 3b): edge-tts works from Azure's network; smoke tests for `06_no_styles.docx` and `01_novel.pdf` pass over HTTPS; chars/s and peak memory recorded in `docs/spike_results.md`; optional Piper re-test (`piper-low`, arena off, 300-char pieces) under the 1 GiB limit decides whether `TTS_FALLBACK=piper` is enabled.
 
-## 15. v2 outline (after v1 ships)
-- Detect dialogue spans in paragraphs and split them into separate segments.
-- Free LLM (Gemini or Groq) attributes each dialogue segment to a character using surrounding context; build a book-level character list with alias merging.
-- Map characters to distinct edge-tts voices (by gender/tone); narrator voice for everything else.
-- UI: v1/v2 narration toggle and a cast list.
-- Evaluate speaker attribution accuracy on one hand-labeled chapter.
+## 15. v2 — Character voices
+
+v1 behaviour is unchanged and stays the default. v2 adds an opt-in **character voices** mode: narration in the narrator voice, each identified character's dialogue in that character's voice (D10, D31).
+
+### 15.1 Mode and API changes
+- `POST /api/upload` accepts an optional form field `narration_mode`: `single` (default) or `characters`. Any other value → 400 `BAD_REQUEST`.
+- Job object (§7.2) gains:
+  - `narration_mode`: `single` | `characters`.
+  - `status` gains `attributing` between `extracting` and `synthesizing` (characters mode only).
+  - `progress.windows_total`, `progress.windows_done` (attribution windows; 0 in single mode).
+  - `cast`: list of `{ "name", "aliases": [], "gender": "female|male|unknown", "lines": int, "voice": "<edge voice id>", "voice_label": "e.g. Voice 3 (female, British)" }`, ordered by `lines` descending; empty in single mode. The narrator is not in the list.
+  - per chapter `attribution`: `llm` | `baseline` | `mixed` | `none` (single mode) — which method produced its speakers.
+- `GET /api/config` adds `character_voices_available: bool` (false when no LLM key is configured; the upload page then hides the option).
+- Warnings (not errors): `"Speaker detection used the simpler rule-based method for N chapters (the AI service was unavailable or busy)."`
+
+### 15.2 Dialogue segmentation (`app/dialogue/segment.py`)
+Turns each paragraph's single narrator segment into alternating `narration` and `quote` segments. Rules:
+1. **Quote style per document**: count opening marks of each style — curly double `“ ”`, straight double `"`, curly single `‘ ’`, straight single `'`. The style with the most balanced open/close pairs is the document's dialogue style; the others are treated as ordinary text (so `'` inside a double-quote book is never dialogue).
+2. **Apostrophes (single-quote styles)**: a `'`/`’` between two letters (`don't`, `Alice's`) or after a letter and before a space where the word is a known elided form (`talkin'`, `o'`) is an apostrophe, never a quote boundary. An opening single quote must be at paragraph start or follow whitespace/`(`/`[`/`—`/`–` and precede a letter, digit, `…` or `—`. A closing single quote must follow a letter/punctuation and precede whitespace, punctuation or end of paragraph. Leading elisions (`'tis`, `'em`, `'twas`, `'cause`) are apostrophes.
+3. **Multi-paragraph quotes**: a paragraph that ends inside an open quote and a next paragraph that starts with an opening mark continue the same utterance (same speaker).
+4. **Broken quotes**: `“Well,” said Alice, “I suppose so.”` → two quote segments around a narration segment; both belong to one **utterance** id (they share a speaker).
+5. Quote marks are kept in the text for display but stripped before TTS. Nested quotes inside a quote stay part of the outer quote.
+6. Unbalanced quote at paragraph end without a continuation → close it at paragraph end and log a warning count.
+Output: segments carry `kind` (`narration` | `quote`), `utterance_id` (quotes only), and `speaker` (`"narrator"` for narration; filled by attribution for quotes; `"narrator"` if unknown — D33).
+
+### 15.3 Speaker attribution (`app/dialogue/attribute.py`)
+Two methods behind one interface; both return, per utterance, a speaker name or `UNKNOWN`, plus character info.
+
+**Baseline (rule-based)**:
+- Speech-verb list (said, asked, cried, replied, shouted, whispered, answered, exclaimed, added, went on, continued, remarked, muttered, began, called, thought, …).
+- Explicit tags adjacent to the utterance: `<quote> said NAME`, `<quote> NAME said`, `NAME said, <quote>`, `said the NOUN PHRASE` (`said the Hatter`, `said the March Hare`). NAME = capitalised name or `the` + capitalised/lowercase noun phrase up to 4 words.
+- Pronoun tags (`she said`) → the most recent explicitly named character of matching gender in the last 3 paragraphs if exactly one candidate, else UNKNOWN.
+- Turn-taking: inside a run of consecutive dialogue-only paragraphs, if the last two explicitly tagged speakers are A then B, untagged utterances alternate A, B, A… until the run ends.
+- Everything else → UNKNOWN.
+
+**LLM (Groq, D32)**:
+- Windows of consecutive paragraphs up to ~1,500 words, with the previous 2 paragraphs included as read-only context. Utterances are numbered `Q1…Qn` inline in the window text.
+- One request per window: system + user prompt asking for strict JSON:
+  `{"quotes":[{"id":"Q1","speaker":"Alice"}, …], "characters":[{"name":"Alice","aliases":["Miss Alice"],"gender":"female"}, …]}`; `speaker` is a character name or `"UNKNOWN"`. The running character list from earlier windows is included so names stay consistent. `temperature 0`, JSON response format.
+- Validation: every id answered exactly once, speakers non-empty strings; otherwise one retry with the validation error appended; then the **baseline** result is used for that window (D34).
+- Rate limiting: a client-side limiter (`LLM_MAX_REQUESTS_PER_MINUTE`, default 25; `LLM_MAX_REQUESTS_PER_DAY`, default 800) and honouring `retry-after` / 429. If the daily budget is exhausted, remaining windows use the baseline.
+- Requests use `httpx` against Groq's OpenAI-compatible endpoint (no new SDK dependency). Model from `LLM_MODEL`.
+- Results cached per job (window hash → response) so a retry never pays twice.
+
+**Combining (production method)**: decided by the dev-set evaluation in Phase 6.2 and recorded as a decision: one of `llm`, `baseline`, or `llm_with_baseline_override` (an explicit `said NAME` tag wins over the LLM).
+
+### 15.4 Cast building (`app/dialogue/cast.py`)
+- Canonical name normalisation: strip leading `the`, honorifics (Mr, Mrs, Miss, Dr, Professor, Sir, Lady, Father), punctuation; casefold.
+- Merge: LLM aliases; plus rapidfuzz `token_set_ratio ≥ 90` or one name's tokens a subset of the other's (`Hatter` ⊂ `the Mad Hatter`), only when genders don't conflict.
+- Gender: majority of LLM reports, else pronoun counts near the character's tags, else `unknown`.
+- Display name: the most frequent surface form.
+
+### 15.5 Voice casting (`app/dialogue/voices.py`)
+- Narrator: `EDGE_VOICE` (unchanged).
+- Pools: English edge-tts neural voices, split female / male (verified list in config, excluding the narrator voice), ordered so adjacent picks differ in accent.
+- The `MAX_CAST` (default 8) characters with most lines get distinct voices: females from the female pool, males from the male pool, `unknown` from whichever pool has more unused voices.
+- All other characters share one "minor female" / "minor male" voice; `unknown`-gender minors use the minor voice of the larger pool.
+- `UNKNOWN` speaker → narrator voice (D33).
+- Deterministic: same cast → same voices.
+
+### 15.6 Narration changes
+- Chunking (§6.6) never puts two segments with different speakers into one chunk; each chunk carries its voice.
+- Pause between segments of different speakers inside a paragraph: 150 ms. Quote marks removed before synthesis.
+- Chapter titles are always read by the narrator.
+- Everything else (order, concurrency, D27 no-gap rule, assembly) is unchanged.
+
+### 15.7 Limits
+- Same document limits as v1 (§4).
+- Characters mode is offered only when `GROQ_API_KEY` is set.
+- Expected LLM use: ~1 request per 1,500 words (≈ 67 for a 100,000-word book).
+
+### 15.8 Frontend
+- Upload page: a two-option choice "Single narrator" (default) / "Character voices (beta)", with one line: "Uses an AI service (Groq) to work out who is speaking; the document's text is sent to it." Hidden when `character_voices_available` is false.
+- Progress: "Finding the characters… (window 3 of 12)" during `attributing`.
+- Book page: a **Cast** section (name, voice label, number of lines; "Narrator" first) and per-chapter note when `attribution` is `baseline`.
+- Sample: add a second static sample in characters mode (Alice ch. 7) at `/sample/characters`.
+
+### 15.9 Evaluation (`scripts/evaluate_dialogue.py`)
+- Labels: `testset_dialogue/labels/<chapter>.jsonl`, one line per gold utterance: `{"id", "paragraph", "start", "end", "text", "speaker", "explicit": bool}` plus `<chapter>.cast.json` (canonical name → aliases). Created by the user with `scripts/label_dialogue.py`.
+- Metrics per chapter and micro-averaged:
+  - **Quote detection**: precision / recall / F1, a detected span matching a gold span when their character overlap ≥ 80% of the longer one.
+  - **Attribution accuracy** on matched utterances (speaker equal after alias mapping), split into **explicit** (gold `explicit: true`) and **implicit**; also % predicted UNKNOWN.
+  - **Voice accuracy**: % of matched utterances whose assigned voice equals the voice the gold speaker would get (what the listener actually hears).
+  - For each method: baseline, llm, llm_with_baseline_override; plus LLM requests and seconds per chapter.
+- Sets: dev = `alice_ch07`, `brown_glass`; **held-out = `ball_ch03`** (never inspected during development; first run reported — D25 applies).
 
 ## 16. Repository structure
 ```
