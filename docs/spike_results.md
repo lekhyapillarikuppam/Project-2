@@ -96,3 +96,18 @@ frame-based durations).
 **about 12½ min** at 720 chars/s (*Alice*), at most about 15 min at 599 chars/s (the short-chapter
 DOCX). The memory does not grow with book length (audio streams to files), so a 100,000-word book
 should stay near the *Alice* figures.
+
+## Production check (Phase 5, 2026-10-18)
+
+- **Frontend**: Vercel, <https://project-2-eight-azure.vercel.app> (root `frontend`, Vite preset,
+  `VITE_API_URL=https://lekhya-audiobook.centralindia.cloudapp.azure.com`).
+- **Backend**: the Azure VM redeployed with the per-IP upload limit (D30) and
+  `CORS_ORIGINS=https://project-2-eight-azure.vercel.app,http://localhost:5173`.
+- **Checked by the user, laptop and phone on mobile data — passed**: `/sample` plays; upload
+  `06_no_styles.docx`, chapter 1 played early, speed change, chapter and full-book downloads; direct
+  reload of `/book/<id>` (Vercel rewrite); `08_scanned.pdf` shows the rejection message.
+- **Checked from the command line**: `/`, `/sample`, `/sample/job.json` and an arbitrary
+  `/book/<id>` path all return 200 from Vercel (the rewrite serves `index.html`); the deployed bundle
+  calls the Azure API; the API answers the Vercel origin with
+  `Access-Control-Allow-Origin: https://project-2-eight-azure.vercel.app`; `/api/config` reports
+  `tts_fallback: none`.

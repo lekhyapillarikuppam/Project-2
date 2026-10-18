@@ -9,7 +9,7 @@ MP3. No account, no paid APIs.
 
 UMC301 Applied Data Science and Artificial Intelligence — Project 2.
 
-**Live:** <VERCEL_URL> · sample audiobook: <VERCEL_URL>/sample ·
+**Live:** <https://project-2-eight-azure.vercel.app> · sample audiobook: <https://project-2-eight-azure.vercel.app/sample> ·
 backend health: <https://lekhya-audiobook.centralindia.cloudapp.azure.com/api/health>
 
 ![Readaloud playing the sample audiobook](docs/screenshots/desktop-light-sample.png)

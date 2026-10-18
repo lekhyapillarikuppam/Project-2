@@ -5,7 +5,7 @@ Close other tabs and notifications. Speak calmly; cut long waits in editing.
 
 | # | Length | Screen | Action | Narration |
 |---|---|---|---|---|
-| 1 | 0:00–0:12 | Start page `<VERCEL_URL>` | Hold on the page; move the pointer over the drop zone | "This is Readaloud. It turns a PDF or Word document into an audiobook, split into chapters, using neural text-to-speech." |
+| 1 | 0:00–0:12 | Start page `https://project-2-eight-azure.vercel.app` | Hold on the page; move the pointer over the drop zone | "This is Readaloud. It turns a PDF or Word document into an audiobook, split into chapters, using neural text-to-speech." |
 | 2 | 0:12–0:30 | `/sample` | Click **Try a sample**, press play for ~5 s | "Here's a sample. You get a table of contents with each chapter's length, a player, and downloads. The sample is static, so it always works." |
 | 3 | 0:30–0:50 | Start page | Drag `01_novel.pdf` onto the drop zone; the upload bar fills | "Now a real book: Alice in Wonderland as a PDF. The server checks the file, extracts the text with its layout, and removes page numbers, headers and footnotes." |
 | 4 | 0:50–1:10 | Book page | Show *Reading your document and finding chapters…* then *Narrating chapter 1 of 12…* and the chapter list | "It found the twelve chapters. They are narrated in order, four sentence chunks at a time, with an estimate of the time left." |
