@@ -290,7 +290,51 @@ def lint_labels(
                 fake = {"paragraph": it["p"], "start": it["s"], "end": it["e"]}
                 add("warn", fake, "marked Not a quote but followed by `thought` (D38: thoughts belong to the thinker)")
 
+    findings.extend(_dropped_quotes(chapter, paragraphs, by_paragraph, items or [], marks, family))
     findings.sort(key=lambda f: (f.paragraph, f.start, f.level))
+    return findings
+
+
+_CANDIDATE_KEY = re.compile(r"^c(\d+):(\d+):(\d+)$")
+
+
+def _dropped_quotes(
+    chapter: str,
+    paragraphs: list[str],
+    gold_by_paragraph: dict[int, list[dict[str, Any]]],
+    items: list[dict[str, Any]],
+    marks: str,
+    family: str,
+) -> list[Finding]:
+    """Narrowed candidates: quote marks of the family left in the original candidate span that no
+    gold span or Not-a-quote decision covers (a quote lost when the span was narrowed)."""
+    covered: dict[int, list[tuple[int, int]]] = {}
+    for p, row in gold_by_paragraph.items():
+        covered.setdefault(p, []).extend((x["start"], x["end"]) for x in row)
+    for it in items:
+        if it["decision"] == "not_quote":
+            covered.setdefault(it["p"], []).append((it["s"], it["e"]))
+
+    findings: list[Finding] = []
+    for it in items:
+        m = _CANDIDATE_KEY.match(str(it.get("key", "")))
+        if it.get("origin") != "candidate" or not m:
+            continue
+        p, s0, e0 = (int(g) for g in m.groups())
+        if (it["s"], it["e"]) == (s0, e0) or not 0 <= p < len(paragraphs):
+            continue
+        text = paragraphs[p]
+        loose = [
+            i for i in range(s0, min(e0, len(text)))
+            if text[i] in marks
+            and not (family == "single" and _is_apostrophe(text, i))
+            and not any(s <= i < e for s, e in covered.get(p, []))
+        ]  # fmt: skip
+        if loose:
+            s, e = loose[0], loose[-1] + 1
+            findings.append(Finding("warn", chapter, p, s, e, _excerpt(text[s:e]),
+                                    f"possible dropped quote: {len(loose)} quote mark(s) of the narrowed candidate "
+                                    f"[{s0}:{e0}] not covered by a gold span or Not a quote"))  # fmt: skip
     return findings
 
 

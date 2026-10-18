@@ -88,6 +88,20 @@ def test_speaker_missing_from_cast_is_an_error() -> None:
     assert found == [("error", 4, "speaker 'Dormouse' is not in the cast")]
 
 
+def test_narrowed_candidate_with_dropped_quote_warns() -> None:
+    whole = len(PARAGRAPHS[0])
+    narrowed = span(0, "‘Well,’")
+    item = {"key": f"c0:0:{whole}", "p": 0, "s": narrowed[0], "e": narrowed[1], "origin": "candidate",
+            "decision": "quote"}  # fmt: skip
+    found = problems([line(0, *narrowed, "U1")], [item])
+    assert len(found) == 1 and found[0][:2] == ("warn", 0) and "possible dropped quote" in found[0][2]
+
+    rest = span(0, "‘I suppose so.’")
+    assert problems([line(0, *narrowed, "U1"), line(0, *rest, "U1")], [item]) == []
+    not_quote = {"key": "added", "p": 0, "s": rest[0], "e": rest[1], "origin": "added", "decision": "not_quote"}
+    assert problems([line(0, *narrowed, "U1")], [item, not_quote]) == []
+
+
 @pytest.fixture
 def chapter_files(tmp_path: Path) -> Path:
     text = tmp_path / "text" / "toy.json"

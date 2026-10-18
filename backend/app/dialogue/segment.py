@@ -47,6 +47,7 @@ SPEECH_VERBS = (
     "returned", "retorted", "roared", "screamed", "sighed", "put in", "broke in", "inquired",
     "demanded", "insisted", "admitted", "agreed", "protested", "persisted", "pleaded", "urged",
     "suggested", "declared", "groaned", "panted", "snapped", "sobbed", "stammered", "yelled",
+    "grumbled", "ventured",  # Phase 6.2 gate: alice_ch07 ¶22 `the Hatter grumbled:`, ¶55 `Alice ventured to ask`
 )  # fmt: skip
 _VERB = "(?:" + "|".join(re.escape(v) for v in sorted(SPEECH_VERBS, key=len, reverse=True)) + r")\b"
 _PRONOUN = r"(?:he|she|they|it|i|we|you)\b"
