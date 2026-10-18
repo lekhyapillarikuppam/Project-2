@@ -1,7 +1,7 @@
 # Test set results
 
-- Date: 2026-10-16
-- Commit: `3247049 + uncommitted changes`
+- Date: 2026-10-18
+- Commit: `3df81c3 + uncommitted changes`
 - Command: `python scripts\evaluate.py` (from `backend\`)
 
 ## Overall
@@ -14,7 +14,7 @@
 | Chapter F1 (micro) | 1.00 |
 | TP / detected / labeled | 60 / 60 / 60 |
 | Total noise paragraphs | 0 |
-| Slowest file | 04_with_outline.pdf (2.8 s) |
+| Slowest file | 04_with_outline.pdf (1.1 s) |
 
 ## Rejections
 
@@ -28,13 +28,13 @@
 
 | File | Actual | Structure | Detected | Labeled | P | R | F1 | Order OK | Noise | Time (s) | Warnings |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 01_novel.pdf | accept | typography | 12 | 12 | 1.00 | 1.00 | 1.00 | yes | 0 | 1.3 | - |
-| 02_lecture_notes.pdf | accept | typography | 6 | 6 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.1 | - |
-| 03_textbook_chapter.pdf | accept | typography | 6 | 6 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.2 | - |
-| 04_with_outline.pdf | accept | outline | 16 | 16 | 1.00 | 1.00 | 1.00 | yes | 0 | 2.8 | - |
-| 05_styles.docx | accept | styles | 4 | 4 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.8 | - |
-| 06_no_styles.docx | accept | typography | 10 | 10 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.5 | - |
-| 07_messy.pdf | accept | typography | 6 | 6 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.1 | - |
+| 01_novel.pdf | accept | typography | 12 | 12 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.5 | - |
+| 02_lecture_notes.pdf | accept | typography | 6 | 6 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.0 | - |
+| 03_textbook_chapter.pdf | accept | typography | 6 | 6 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.1 | - |
+| 04_with_outline.pdf | accept | outline | 16 | 16 | 1.00 | 1.00 | 1.00 | yes | 0 | 1.1 | - |
+| 05_styles.docx | accept | styles | 4 | 4 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.4 | - |
+| 06_no_styles.docx | accept | typography | 10 | 10 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.2 | - |
+| 07_messy.pdf | accept | typography | 6 | 6 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.0 | - |
 
 ## Unmatched titles
 

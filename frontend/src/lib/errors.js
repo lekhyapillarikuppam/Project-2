@@ -14,6 +14,7 @@ export const MESSAGES = {
   SCANNED_PDF: "This PDF looks like scanned images with no selectable text. Scanned documents aren't supported.",
   EMPTY_DOCUMENT: 'No readable text was found in this document.',
   SERVER_BUSY: 'The server is busy converting other documents. Please try again in a few minutes.',
+  RATE_LIMITED: "You've uploaded a lot of documents in the last hour. Please try again later.",
   JOB_NOT_FOUND: NO_LONGER_AVAILABLE,
   JOB_EXPIRED: NO_LONGER_AVAILABLE,
   CHAPTER_NOT_READY: 'This chapter is still being generated.',

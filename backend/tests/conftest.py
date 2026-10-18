@@ -69,6 +69,7 @@ def api_settings(tmp_path: Path) -> Settings:
         tts_fallback="none",
         tts_max_retries=1,
         cleanup_interval_minutes=60,
+        uploads_per_ip_per_hour=0,  # test_ratelimit.py turns the D30 limit on where it is tested
     )
 
 

@@ -1,7 +1,7 @@
 # Test set results
 
-- Date: 2026-10-16
-- Commit: `e2828f8`
+- Date: 2026-10-18
+- Commit: `3df81c3 + uncommitted changes`
 - Command: `python scripts\evaluate.py` (from `backend\`)
 
 ## Overall
@@ -14,7 +14,7 @@
 | Chapter F1 (micro) | 1.00 |
 | TP / detected / labeled | 79 / 79 / 79 |
 | Total noise paragraphs | 0 |
-| Slowest file | H05_moby_dick.docx (5.3 s) |
+| Slowest file | H05_moby_dick.docx (2.2 s) |
 
 ## Rejections
 
@@ -29,11 +29,11 @@
 
 | File | Actual | Structure | Detected | Labeled | P | R | F1 | Order OK | Noise | Time (s) | Warnings |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| H01_persuasion.pdf | accept | typography | 24 | 24 | 1.00 | 1.00 | 1.00 | yes | 0 | 2.0 | - |
-| H02_ball_and_cross.pdf | accept | typography | 20 | 20 | 1.00 | 1.00 | 1.00 | yes | 0 | 2.0 | - |
-| H03_buster_bear.docx | accept | styles | 23 | 23 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.5 | - |
+| H01_persuasion.pdf | accept | typography | 24 | 24 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.9 | - |
+| H02_ball_and_cross.pdf | accept | typography | 20 | 20 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.8 | - |
+| H03_buster_bear.docx | accept | styles | 23 | 23 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.2 | - |
 | H04_optimisation_notes.pdf | accept | outline | 6 | 6 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.0 | - |
-| H08_partial_scan.pdf | accept | typography | 6 | 6 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.8 | 2 image-only pages were skipped |
+| H08_partial_scan.pdf | accept | typography | 6 | 6 | 1.00 | 1.00 | 1.00 | yes | 0 | 0.4 | 2 image-only pages were skipped |
 
 ## Unmatched titles
 

@@ -21,6 +21,9 @@ AI-Powered Audiobook Generator (UMC301 Project 2). Converts PDF/DOCX into chapte
 - Environment check: `cd backend; python scripts/check_env.py`
 - Tests: `cd backend; pytest -q`
 - Frontend dev server: `cd frontend; npm run dev`
+- Frontend against the Azure API: `cd frontend; npm run dev:remote`
+- Frontend tests / build: `cd frontend; npm test`, `npm run build`
+- Chapter-detection evaluation: `cd backend; python scripts\evaluate.py` (held-out: `--testset ..\testset_heldout --history`)
 
 ## Code conventions
 - Python: type hints everywhere, small pure functions in `pipeline/` and `tts/` (easy to unit test), no global mutable state outside `jobs/`.

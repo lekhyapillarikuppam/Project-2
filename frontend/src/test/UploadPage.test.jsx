@@ -83,6 +83,14 @@ describe('UploadPage', () => {
     expect(screen.getByRole('button', { name: /drop a pdf or docx here/i })).toBeInTheDocument()
   })
 
+  it('shows the RATE_LIMITED message for a 429', async () => {
+    const user = await renderPage()
+    await user.upload(screen.getByTestId('file-input'), fileOf('eleventh.pdf', 1000))
+    FakeXHR.instances[0].respond(429, { error: { code: 'RATE_LIMITED', message: 'too many' } })
+    expect(await screen.findByRole('alert')).toHaveTextContent(MESSAGES.RATE_LIMITED)
+    expect(MESSAGES.RATE_LIMITED).toBe("You've uploaded a lot of documents in the last hour. Please try again later.")
+  })
+
   it('opens the book page after a 202', async () => {
     const user = await renderPage()
     await user.upload(screen.getByTestId('file-input'), fileOf('alice.pdf', 1000))

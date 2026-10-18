@@ -17,3 +17,11 @@ Appended by `evaluate.py --history`; never overwritten. The first entry is the h
 - Reject accuracy: 4/4 (H05_moby_dick.docx pass, H06_encrypted.pdf pass, H07_corrupt.pdf pass, H09_too_many_pages.pdf pass)
 - Total noise paragraphs: 0
 - Per-file F1: H01_persuasion.pdf 1.00, H02_ball_and_cross.pdf 1.00, H03_buster_bear.docx 1.00, H04_optimisation_notes.pdf 1.00, H08_partial_scan.pdf 1.00
+
+## 2026-10-18 13:58 - commit `3df81c3 + uncommitted changes`
+
+- Test set: `testset_heldout`
+- Precision / recall / F1 (micro): 1.00 / 1.00 / 1.00 (TP 79, detected 79, labeled 79)
+- Reject accuracy: 4/4 (H05_moby_dick.docx pass, H06_encrypted.pdf pass, H07_corrupt.pdf pass, H09_too_many_pages.pdf pass)
+- Total noise paragraphs: 0
+- Per-file F1: H01_persuasion.pdf 1.00, H02_ball_and_cross.pdf 1.00, H03_buster_bear.docx 1.00, H04_optimisation_notes.pdf 1.00, H08_partial_scan.pdf 1.00

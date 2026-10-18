@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.errors import install_error_handlers
+from app.api.ratelimit import UploadRateLimiter
 from app.api.routes import FullBookBuilder, router
 from app.config import Settings, get_settings
 from app.jobs import CleanupThread, EngineFactory, JobRegistry, JobWorker, wipe_jobs_folder
@@ -43,13 +44,14 @@ def create_app(settings: Settings | None = None, engine_factory: EngineFactory |
     app.state.engine_factory = engine_factory or (lambda s: build_engine(s))
     app.state.registry = JobRegistry(settings.max_queued_jobs)
     app.state.full_books = FullBookBuilder()
+    app.state.upload_limiter = UploadRateLimiter(settings.uploads_per_ip_per_hour)
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_methods=["GET", "POST"],
         allow_headers=["*"],
-        expose_headers=["Content-Disposition", "Content-Range", "Accept-Ranges", "Content-Length"],
+        expose_headers=["Content-Disposition", "Content-Range", "Accept-Ranges", "Content-Length", "Retry-After"],
     )
     install_error_handlers(app)
     app.include_router(router)

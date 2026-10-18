@@ -16,6 +16,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.api.errors import FULL_BOOK_NOT_READY_MESSAGE, ApiError
 from app.api.files import chapter_filename, content_disposition, full_book_filename
+from app.api.ratelimit import UploadRateLimiter, client_ip
 from app.config import Settings
 from app.jobs import Job, JobRegistry, RegistryFull
 from app.jobs.models import utc_now
@@ -147,6 +148,14 @@ async def _receive_upload(request: Request, folder: Path, max_bytes: int) -> tup
 async def upload(request: Request) -> dict:
     settings = _settings(request)
     registry = _registry(request)
+
+    # D30: counted first, so rejected uploads count too; over the limit the body is never read.
+    limiter: UploadRateLimiter = request.app.state.upload_limiter
+    ip = client_ip(request.client.host if request.client else None, request.headers.get("x-forwarded-for"))
+    retry_after = limiter.hit(ip)
+    if retry_after is not None:
+        logger.warning("Upload from %s rate-limited (retry in %d s)", ip, retry_after)
+        raise ApiError("RATE_LIMITED", headers={"Retry-After": str(retry_after)})
 
     length = request.headers.get("content-length")
     if length and length.isdigit() and int(length) > settings.max_file_bytes + MULTIPART_OVERHEAD_BYTES:

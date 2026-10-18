@@ -1,7 +1,7 @@
 # AI-Powered Audiobook Generator — Specification (v1)
 
 Course: UMC301 Applied Data Science and Artificial Intelligence — Project 2
-Status: revision 6 (2026-10-17, backend moved from Render to an Azure VM). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
+Status: revision 7 (2026-10-18, Phase 5: public deployment). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
 
 ---
 
@@ -52,6 +52,7 @@ No accounts. Generated audio is temporary.
 | Max words (both formats) | 100,000 | server (this is the effective DOCX "page" cap) |
 | Concurrent jobs being processed | 1 | server |
 | Max waiting jobs (not counting the running one) | 3, so at most 4 jobs exist in the active pipeline; the next upload gets `SERVER_BUSY` | server |
+| Uploads per client IP | 10 per rolling hour (accepted or rejected uploads both count); the next gets `RATE_LIMITED`. The client IP is taken from `X-Forwarded-For` only when the request comes from the Caddy container; otherwise the socket address | server |
 | Audio retention | at most 24 h after job creation (earlier if the server restarts, see §10) | server cleanup task |
 
 All values live in config (`.env`), not hard-coded.
@@ -301,6 +302,7 @@ HTTP status for each error code:
 | `TOO_MANY_PAGES`, `CORRUPT_FILE`, `ENCRYPTED_FILE`, `SCANNED_PDF` | 422 |
 | missing `file` field in the upload | 400 |
 | `SERVER_BUSY` | 503 |
+| `RATE_LIMITED` | 429 (with `Retry-After` in seconds) |
 | `JOB_NOT_FOUND` | 404 |
 | `JOB_EXPIRED` | 410 |
 | `CHAPTER_NOT_READY` | 409 |
@@ -345,6 +347,7 @@ Connection check: if `/api/health` fails or takes > 5 s, show "Can't reach the s
 | `SCANNED_PDF` | This PDF looks like scanned images with no selectable text. Scanned documents aren't supported. |
 | `EMPTY_DOCUMENT` | No readable text was found in this document. |
 | `SERVER_BUSY` | The server is busy converting other documents. Please try again in a few minutes. |
+| `RATE_LIMITED` | You've uploaded a lot of documents in the last hour. Please try again later. |
 | `JOB_NOT_FOUND` | This audiobook is no longer available (audio is temporary). Please upload the document again. |
 | `JOB_EXPIRED` | This audiobook is no longer available (audio is temporary). Please upload the document again. |
 | `CHAPTER_NOT_READY` | This chapter is still being generated. |

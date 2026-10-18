@@ -17,6 +17,7 @@ HTTP_STATUS: dict[str, int] = {
     "SCANNED_PDF": 422,
     "MISSING_FILE": 400,
     "SERVER_BUSY": 503,
+    "RATE_LIMITED": 429,
     "JOB_NOT_FOUND": 404,
     "CHAPTER_NOT_FOUND": 404,
     "NOT_FOUND": 404,
@@ -36,21 +37,30 @@ FULL_BOOK_NOT_READY_MESSAGE = "The full book is available once every chapter has
 
 
 class ApiError(Exception):
-    def __init__(self, code: str, message: str | None = None, status: int | None = None) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str | None = None,
+        status: int | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.code = code
         self.message = message or ERROR_MESSAGES.get(code) or EXTRA_MESSAGES.get(code, code)
         self.status = status or HTTP_STATUS.get(code, 400)
+        self.headers = headers
         super().__init__(f"{self.code}: {self.message}")
 
 
-def error_response(code: str, message: str, status: int) -> JSONResponse:
-    return JSONResponse(status_code=status, content={"error": {"code": code, "message": message}})
+def error_response(code: str, message: str, status: int, headers: dict[str, str] | None = None) -> JSONResponse:
+    return JSONResponse(
+        status_code=status, content={"error": {"code": code, "message": message}}, headers=headers
+    )
 
 
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, exc: ApiError) -> JSONResponse:
-        return error_response(exc.code, exc.message, exc.status)
+        return error_response(exc.code, exc.message, exc.status, exc.headers)
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:

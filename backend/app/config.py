@@ -30,12 +30,13 @@ class Settings(BaseSettings):
     min_words: int = 20
     scanned_page_min_chars: int = 30
     scanned_page_ratio: float = 0.5
+    uploads_per_ip_per_hour: int = 10  # D30; 0 disables the limit
 
     # Jobs
     max_active_jobs: int = 1
     max_queued_jobs: int = 3
-    expired_stub_minutes: int = 60
-    memory_log_interval_seconds: int = 30  # while a job runs: log process RSS and cgroup memory  # an expired job answers JOB_EXPIRED this long, then JOB_NOT_FOUND
+    expired_stub_minutes: int = 60  # an expired job answers JOB_EXPIRED this long, then JOB_NOT_FOUND
+    memory_log_interval_seconds: int = 30  # while a job runs: log process RSS and cgroup memory
 
     # TTS
     tts_primary: str = "edge"
