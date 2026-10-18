@@ -21,7 +21,7 @@ attribution for character-voices mode.
   `speaker` is a cast name, or `UNKNOWN` when the text does not tell who speaks.
 - `labels/<name>.cast.json` — `{canonical name: {"aliases": [...], "gender": "female|male|unknown"}}`.
 - `labels/<name>.state.json` — the labelling tool's working state (every candidate and decision,
-  including "not a quote"), so labelling can be resumed. The evaluation does not read it.
+  including "not a quote"), so labelling can be resumed. The evaluation reads it only to count "Not a quote" spans the segmenter still finds.
 
 ## Held-out rule (D25, D35)
 `ball_ch03` is never opened, printed or inspected during development, and its labels are made by
@@ -64,7 +64,9 @@ run the same command again to continue where you left off.
 5. **Export / Done** checks that every candidate is decided and every speaker is in the cast, and
    lists any problems.
 
-Proposed conventions (not yet decided; settle them before labelling and apply them to all three
-chapters): thoughts in quotes (`‘Very uncomfortable for the Dormouse,’ thought Alice`) are quotes
-spoken by the thinker; a quote said by several characters together (`‘No room!’ they cried`) gets
-`UNKNOWN`.
+Conventions (D38, SPEC §15.2 rule 5a), the same for all three chapters:
+- quoted thoughts (`‘Very uncomfortable for the Dormouse,’ thought Alice`) are utterances of the thinker;
+- speech by several characters at once (`‘No room!’ they cried`) is `UNKNOWN`;
+- quoted writing that nobody says aloud (a label `‘DRINK ME’`, a quoted word inside narration) is
+  **not** an utterance (mark it **Not a quote**);
+- spans include their quote marks; paragraphs are 0-based in the label files.

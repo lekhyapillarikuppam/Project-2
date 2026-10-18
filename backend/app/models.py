@@ -9,6 +9,8 @@ from pydantic import BaseModel
 class Segment(BaseModel):
     speaker: str = "narrator"
     text: str
+    kind: Literal["narration", "quote"] = "narration"  # v2 (SPEC §15.2); v1 is always narration
+    utterance_id: str | None = None  # quotes only; spans of one broken quote share it
 
 
 class Paragraph(BaseModel):

@@ -1,7 +1,7 @@
 # AI-Powered Audiobook Generator — Specification (v1)
 
 Course: UMC301 Applied Data Science and Artificial Intelligence — Project 2
-Status: revision 8 (2026-10-18, v2 character voices specified; v1 live). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
+Status: revision 9 (2026-10-18, v2 spec revised after Phase 6.0 review). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
 
 ---
 
@@ -405,11 +405,13 @@ v1 behaviour is unchanged and stays the default. v2 adds an opt-in **character v
 
 ### 15.2 Dialogue segmentation (`app/dialogue/segment.py`)
 Turns each paragraph's single narrator segment into alternating `narration` and `quote` segments. Rules:
-1. **Quote style per document**: count opening marks of each style — curly double `“ ”`, straight double `"`, curly single `‘ ’`, straight single `'`. The style with the most balanced open/close pairs is the document's dialogue style; the others are treated as ordinary text (so `'` inside a double-quote book is never dialogue).
-2. **Apostrophes (single-quote styles)**: a `'`/`’` between two letters (`don't`, `Alice's`) or after a letter and before a space where the word is a known elided form (`talkin'`, `o'`) is an apostrophe, never a quote boundary. An opening single quote must be at paragraph start or follow whitespace/`(`/`[`/`—`/`–` and precede a letter, digit, `…` or `—`. A closing single quote must follow a letter/punctuation and precede whitespace, punctuation or end of paragraph. Leading elisions (`'tis`, `'em`, `'twas`, `'cause`) are apostrophes.
-3. **Multi-paragraph quotes**: a paragraph that ends inside an open quote and a next paragraph that starts with an opening mark continue the same utterance (same speaker).
+1. **Quote style per document**: for each family — double (`“ ” "`) and single (`‘ ’ '`) — count the marks that are **not** apostrophes (rule 2) per 1,000 words. The family with the higher rate is the document's dialogue family, provided it has at least 2 marks per 1,000 words (otherwise the document has no dialogue and every segment stays narration). Curly and straight marks of the family are treated alike. The other family is ordinary text inside quotes (so `'` inside a double-quote book is never a boundary).
+   - **Open vs close is decided by position, never by glyph** (PDFs swap curly marks, e.g. `table,‘ said Alice; ’it‘s`): a mark is an *opener* if it is at paragraph start or follows whitespace, `(`, `[`, `—`, `–`, and is followed by a non-space; it is a *closer* if it follows a non-space and is followed by whitespace, punctuation or paragraph end. A mark that is both or neither is resolved by the current state (inside a quote → closer, outside → opener).
+2. **Apostrophes (single family only)**: any of `' ‘ ’` is an apostrophe, never a boundary, when it is (a) between two letters (`don't`, `Alice's`, `doesn‘t`); (b) the start of a word in the leading-elision list (`'tis 'twas 'em 'cause 'til 'twere 'ere 'ow 'e`); (c) after `s` at the end of a word **while no quote is open** (plural possessive `the Queens' `); (d) at the end of a word in the trailing-elision list (`o' an' talkin' nothin' somethin' goin' ol'`, plus any word ending `in'`). The two lists are named constants; additions must be justified by the dev set and reported.
+3. **Multi-paragraph quotes**: a paragraph that ends inside an open quote, followed by a paragraph that starts with an opening mark, continues the same utterance (typographic convention) — **unless** the next paragraph contains an explicit speech tag naming a speaker (`said X`, `X said`), in which case the open quote is closed at the end of the first paragraph (damaged-PDF case: missing closing mark).
 4. **Broken quotes**: `“Well,” said Alice, “I suppose so.”` → two quote segments around a narration segment; both belong to one **utterance** id (they share a speaker).
-5. Quote marks are kept in the text for display but stripped before TTS. Nested quotes inside a quote stay part of the outer quote.
+5. Quote spans **include** their marks (start at the opener, end after the closer). Marks are stripped before TTS. Nested quotes (the other family) inside a quote stay part of the outer quote.
+5a. **Labelling conventions** (also used by the evaluation): quoted thoughts (`‘…,’ thought Alice`) are utterances of the thinker; speech by several characters at once (`‘No room!’ they cried`) is `UNKNOWN`; quoted writing that nobody says aloud (a label `‘DRINK ME’`, a quoted word inside narration) is **not** an utterance.
 6. Unbalanced quote at paragraph end without a continuation → close it at paragraph end and log a warning count.
 Output: segments carry `kind` (`narration` | `quote`), `utterance_id` (quotes only), and `speaker` (`"narrator"` for narration; filled by attribution for quotes; `"narrator"` if unknown — D33).
 
@@ -424,13 +426,16 @@ Two methods behind one interface; both return, per utterance, a speaker name or 
 - Everything else → UNKNOWN.
 
 **LLM (Groq, D32)**:
-- Windows of consecutive paragraphs up to ~1,500 words, with the previous 2 paragraphs included as read-only context. Utterances are numbered `Q1…Qn` inline in the window text.
+- **Per chapter, ahead of narration** (D37): chapter N+1 is attributed while chapter N is narrated; chapter 1 is attributed before narration starts. Within a chapter, windows of consecutive paragraphs up to `LLM_WINDOW_WORDS` (default 1,200) that never split an utterance (a multi-paragraph quote or a broken quote stays in one window), plus the previous 2 paragraphs as read-only context **without** ids. Utterances are numbered `Q1…Qn` inline as `[Q3]‘…’`.
+- Output format is terse: `{"q":{"Q1":"Alice","Q2":"UNKNOWN"},"new":[{"name":"Dormouse","gender":"male","aliases":[]}]}` — speakers for every id, plus only characters not already in the supplied list. The supplied running list is capped at the 30 most frequent characters (name + gender only), so prompts don't grow without bound. Model "thinking"/reasoning output is disabled where the model allows it.
 - One request per window: system + user prompt asking for strict JSON:
   `{"quotes":[{"id":"Q1","speaker":"Alice"}, …], "characters":[{"name":"Alice","aliases":["Miss Alice"],"gender":"female"}, …]}`; `speaker` is a character name or `"UNKNOWN"`. The running character list from earlier windows is included so names stay consistent. `temperature 0`, JSON response format.
 - Validation: every id answered exactly once, speakers non-empty strings; otherwise one retry with the validation error appended; then the **baseline** result is used for that window (D34).
-- Rate limiting: a client-side limiter (`LLM_MAX_REQUESTS_PER_MINUTE`, default 25; `LLM_MAX_REQUESTS_PER_DAY`, default 800) and honouring `retry-after` / 429. If the daily budget is exhausted, remaining windows use the baseline.
+- Rate limiting is **token-based**: estimate each request's tokens (prompt chars ÷ 4 + expected output) and keep a rolling 60 s budget of `LLM_TOKENS_PER_MINUTE` (default 7,000, below Groq's 8,000); also honour `x-ratelimit-remaining-tokens`, `x-ratelimit-reset-tokens`, `retry-after` and 429. `LLM_MAX_REQUESTS_PER_DAY` (default 800) caps daily use. If the daily budget is exhausted, or a window waits more than 120 s for budget, that window uses the baseline (D34).
 - Requests use `httpx` against Groq's OpenAI-compatible endpoint (no new SDK dependency). Model from `LLM_MODEL`.
 - Results cached per job (window hash → response) so a retry never pays twice.
+
+**Model choice**: `LLM_MODEL` is chosen in Phase 6.2 by evaluating the candidate models Groq currently offers (initially `qwen/qwen3.8-27b` and `openai/gpt-oss-120b`) on the dev chapters for accuracy, tokens per window and latency (D32).
 
 **Combining (production method)**: decided by the dev-set evaluation in Phase 6.2 and recorded as a decision: one of `llm`, `baseline`, or `llm_with_baseline_override` (an explicit `said NAME` tag wins over the LLM).
 
@@ -441,9 +446,10 @@ Two methods behind one interface; both return, per utterance, a speaker name or 
 - Display name: the most frequent surface form.
 
 ### 15.5 Voice casting (`app/dialogue/voices.py`)
+- **Ranking before narration**: a fast baseline pass over the whole book (local, no LLM) counts lines per character; this ranking decides who gets the `MAX_CAST` distinct voices up front. Characters first found by the LLM later get the next free voice in their pool (or the minor voice once the pool is used up). Voices never change once a chapter using them has been narrated.
 - Narrator: `EDGE_VOICE` (unchanged).
 - Pools: English edge-tts neural voices, split female / male (verified list in config, excluding the narrator voice), ordered so adjacent picks differ in accent.
-- The `MAX_CAST` (default 8) characters with most lines get distinct voices: females from the female pool, males from the male pool, `unknown` from whichever pool has more unused voices.
+- The `MAX_CAST` (default 8) characters ranked highest get distinct voices: females from the female pool, males from the male pool, `unknown` from whichever pool has more unused voices.
 - All other characters share one "minor female" / "minor male" voice; `unknown`-gender minors use the minor voice of the larger pool.
 - `UNKNOWN` speaker → narrator voice (D33).
 - Deterministic: same cast → same voices.
@@ -457,7 +463,7 @@ Two methods behind one interface; both return, per utterance, a speaker name or 
 ### 15.7 Limits
 - Same document limits as v1 (§4).
 - Characters mode is offered only when `GROQ_API_KEY` is set.
-- Expected LLM use: ~1 request per 1,500 words (≈ 67 for a 100,000-word book).
+- Expected LLM use: ~1 request per 1,200 words (≈ 85 for a 100,000-word book). At Groq's 8,000 tokens/minute that is roughly 2–4 windows per minute; because attribution runs one chapter ahead of narration (D37), most of it overlaps with narration time.
 
 ### 15.8 Frontend
 - Upload page: a two-option choice "Single narrator" (default) / "Character voices (beta)", with one line: "Uses an AI service (Groq) to work out who is speaking; the document's text is sent to it." Hidden when `character_voices_available` is false.
@@ -466,11 +472,11 @@ Two methods behind one interface; both return, per utterance, a speaker name or 
 - Sample: add a second static sample in characters mode (Alice ch. 7) at `/sample/characters`.
 
 ### 15.9 Evaluation (`scripts/evaluate_dialogue.py`)
-- Labels: `testset_dialogue/labels/<chapter>.jsonl`, one line per gold utterance: `{"id", "paragraph", "start", "end", "text", "speaker", "explicit": bool}` plus `<chapter>.cast.json` (canonical name → aliases). Created by the user with `scripts/label_dialogue.py`.
+- Labels: `testset_dialogue/labels/<chapter>.jsonl`, one line per gold quote span: `{"id", "paragraph" (0-based index into the chapter text file), "start", "end" (character offsets, end exclusive, marks included), "text", "speaker", "explicit": bool, "utterance"}` plus `<chapter>.cast.json` (canonical name → `{"aliases": [], "gender"}`). Created by the user with `scripts/label_dialogue.py`, following the §15.2 rule 5a conventions.
 - Metrics per chapter and micro-averaged:
   - **Quote detection**: precision / recall / F1, a detected span matching a gold span when their character overlap ≥ 80% of the longer one.
   - **Attribution accuracy** on matched utterances (speaker equal after alias mapping), split into **explicit** (gold `explicit: true`) and **implicit**; also % predicted UNKNOWN.
-  - **Voice accuracy**: % of matched utterances whose assigned voice equals the voice the gold speaker would get (what the listener actually hears).
+  - **Voice accuracy** (what the listener hears): using the system's own voice map for the chapter, the *expected* voice of a gold utterance is the voice the system assigned to the gold speaker's character (matched by alias), else the minor voice for the gold speaker's gender, else the narrator voice if gold is `UNKNOWN`; a matched utterance is voice-correct if its synthesized voice equals the expected voice.
   - For each method: baseline, llm, llm_with_baseline_override; plus LLM requests and seconds per chapter.
 - Sets: dev = `alice_ch07`, `brown_glass`; **held-out = `ball_ch03`** (never inspected during development; first run reported — D25 applies).
 
