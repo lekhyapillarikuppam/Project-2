@@ -1,0 +1,18 @@
+{
+  "Alice": {
+    "aliases": [],
+    "gender": "female"
+  },
+  "the March Hare": {
+    "aliases": [],
+    "gender": "male"
+  },
+  "Hatter": {
+    "aliases": [],
+    "gender": "male"
+  },
+  "Dormouse": {
+    "aliases": [],
+    "gender": "male"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "Father Brown": {
+    "aliases": [
+      "Brown"
+    ],
+    "gender": "male"
+  },
+  "Dr Hood": {
+    "aliases": [
+      "Scientist"
+    ],
+    "gender": "male"
+  },
+  "Maggie MacNab": {
+    "aliases": [],
+    "gender": "female"
+  },
+  "James Todhunter": {
+    "aliases": [],
+    "gender": "male"
+  },
+  "Mrs MacNab": {
+    "aliases": [],
+    "gender": "female"
+  },
+  "Zaladin": {
+    "aliases": [
+      "Mr Glass"
+    ],
+    "gender": "male"
+  }
+}

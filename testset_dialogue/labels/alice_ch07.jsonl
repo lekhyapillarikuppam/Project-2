@@ -1,0 +1,142 @@
+{"id": "Q1", "paragraph": 1, "start": 88, "end": 107, "text": "‘No room! No room!’", "speaker": "UNKNOWN", "explicit": false, "utterance": "U1"}
+{"id": "Q2", "paragraph": 1, "start": 151, "end": 176, "text": "‘There’s PLENTY of room!’", "speaker": "Alice", "explicit": true, "utterance": "U2"}
+{"id": "Q3", "paragraph": 2, "start": 0, "end": 17, "text": "‘Have some wine,’", "speaker": "the March Hare", "explicit": true, "utterance": "U3"}
+{"id": "Q4", "paragraph": 3, "start": 71, "end": 94, "text": "‘I don’t see any wine,’", "speaker": "Alice", "explicit": true, "utterance": "U4"}
+{"id": "Q5", "paragraph": 4, "start": 0, "end": 18, "text": "‘There isn’t any,’", "speaker": "the March Hare", "explicit": true, "utterance": "U5"}
+{"id": "Q6", "paragraph": 5, "start": 0, "end": 47, "text": "‘Then it wasn’t very civil of you to offer it,’", "speaker": "Alice", "explicit": true, "utterance": "U6"}
+{"id": "Q7", "paragraph": 5, "start": 68, "end": 132, "text": "‘It wasn’t very civil of you to sit down without being invited,’", "speaker": "the March Hare", "explicit": true, "utterance": "U7"}
+{"id": "Q8", "paragraph": 6, "start": 0, "end": 34, "text": "‘I didn’t know it was YOUR table,‘", "speaker": "Alice", "explicit": true, "utterance": "U8"}
+{"id": "Q9", "paragraph": 6, "start": 47, "end": 92, "text": "’it‘s laid for a great many more than three.’", "speaker": "Alice", "explicit": false, "utterance": "U8"}
+{"id": "Q10", "paragraph": 7, "start": 0, "end": 26, "text": "‘Your hair wants cutting,’", "speaker": "Hatter", "explicit": true, "utterance": "U9"}
+{"id": "Q11", "paragraph": 8, "start": 0, "end": 48, "text": "‘You should learn not to make personal remarks,’", "speaker": "Alice", "explicit": true, "utterance": "U10"}
+{"id": "Q12", "paragraph": 8, "start": 80, "end": 97, "text": "‘it’s very rude.’", "speaker": "Alice", "explicit": false, "utterance": "U10"}
+{"id": "Q13", "paragraph": 9, "start": 75, "end": 112, "text": "‘Why is a raven like a writing-desk?’", "speaker": "Hatter", "explicit": true, "utterance": "U11"}
+{"id": "Q14", "paragraph": 10, "start": 51, "end": 119, "text": "‘I’m glad they‘ve begun asking riddles.—I believe I can guess that,’", "speaker": "Alice", "explicit": true, "utterance": "U12"}
+{"id": "Q15", "paragraph": 11, "start": 0, "end": 63, "text": "‘Do you mean that you think you can find out the answer to it?’", "speaker": "the March Hare", "explicit": true, "utterance": "U13"}
+{"id": "Q16", "paragraph": 12, "start": 0, "end": 13, "text": "‘Exactly so,’", "speaker": "Alice", "explicit": true, "utterance": "U14"}
+{"id": "Q17", "paragraph": 13, "start": 0, "end": 36, "text": "‘Then you should say what you mean,’", "speaker": "the March Hare", "explicit": true, "utterance": "U15"}
+{"id": "Q18", "paragraph": 14, "start": 0, "end": 7, "text": "‘I do,’", "speaker": "Alice", "explicit": true, "utterance": "U16"}
+{"id": "Q19", "paragraph": 14, "start": 31, "end": 101, "text": "‘at least—at least I mean what I say—that’s the same thing, you know.’", "speaker": "Alice", "explicit": true, "utterance": "U17"}
+{"id": "Q20", "paragraph": 15, "start": 0, "end": 27, "text": "‘Not the same thing a bit!’", "speaker": "Hatter", "explicit": true, "utterance": "U18"}
+{"id": "Q21", "paragraph": 15, "start": 45, "end": 138, "text": "‘You might just as well say that ”I see what I eat” is the same thing as ”I eat what I see”!’", "speaker": "Hatter", "explicit": true, "utterance": "U19"}
+{"id": "Q22", "paragraph": 16, "start": 0, "end": 29, "text": "‘You might just as well say,’", "speaker": "the March Hare", "explicit": true, "utterance": "U20"}
+{"id": "Q23", "paragraph": 16, "start": 52, "end": 120, "text": "‘that ”I like what I get” is the same thing as ”I get what I like”!’", "speaker": "the March Hare", "explicit": true, "utterance": "U21"}
+{"id": "Q24", "paragraph": 17, "start": 0, "end": 29, "text": "‘You might just as well say,’", "speaker": "Dormouse", "explicit": true, "utterance": "U22"}
+{"id": "Q25", "paragraph": 17, "start": 89, "end": 167, "text": "‘that ”I breathe when I sleep” is the same thing as ”I sleep when I breathe”!’", "speaker": "Dormouse", "explicit": false, "utterance": "U23"}
+{"id": "Q26", "paragraph": 18, "start": 0, "end": 32, "text": "‘It IS the same thing with you,’", "speaker": "Hatter", "explicit": true, "utterance": "U24"}
+{"id": "Q27", "paragraph": 19, "start": 47, "end": 77, "text": "‘What day of the month is it?’", "speaker": "Hatter", "explicit": false, "utterance": "U25"}
+{"id": "Q28", "paragraph": 20, "start": 41, "end": 54, "text": "‘The fourth.’", "speaker": "Alice", "explicit": false, "utterance": "U26"}
+{"id": "Q29", "paragraph": 20, "start": 55, "end": 72, "text": "‘Two days wrong!’", "speaker": "Hatter", "explicit": true, "utterance": "U27"}
+{"id": "Q30", "paragraph": 20, "start": 92, "end": 136, "text": "‘I told you butter wouldn’t suit the works!’", "speaker": "Hatter", "explicit": false, "utterance": "U28"}
+{"id": "Q31", "paragraph": 22, "start": 0, "end": 25, "text": "‘It was the BEST butter,’", "speaker": "the March Hare", "explicit": false, "utterance": "U29"}
+{"id": "Q32", "paragraph": 22, "start": 57, "end": 105, "text": "‘Yes, but some crumbs must have got in as well,’", "speaker": "Hatter", "explicit": false, "utterance": "U30"}
+{"id": "Q33", "paragraph": 22, "start": 127, "end": 179, "text": "‘you shouldn’t have put it in with the bread-knife.’", "speaker": "the March Hare", "explicit": false, "utterance": "U31"}
+{"id": "Q34", "paragraph": 23, "start": 187, "end": 222, "text": "‘It was the BEST butter, you know.’", "speaker": "the March Hare", "explicit": false, "utterance": "U32"}
+{"id": "Q35", "paragraph": 24, "start": 62, "end": 83, "text": "‘What a funny watch!’", "speaker": "Alice", "explicit": false, "utterance": "U33"}
+{"id": "Q36", "paragraph": 24, "start": 98, "end": 167, "text": "‘It tells the day of the month, and doesn’t tell what o‘clock it is!’", "speaker": "Alice", "explicit": false, "utterance": "U34"}
+{"id": "Q37", "paragraph": 25, "start": 0, "end": 16, "text": "‘Why should it?’", "speaker": "Hatter", "explicit": true, "utterance": "U35"}
+{"id": "Q38", "paragraph": 25, "start": 38, "end": 81, "text": "‘Does YOUR watch tell you what year it is?’", "speaker": "Hatter", "explicit": false, "utterance": "U36"}
+{"id": "Q39", "paragraph": 26, "start": 0, "end": 16, "text": "‘Of course not,’", "speaker": "Alice", "explicit": true, "utterance": "U37"}
+{"id": "Q40", "paragraph": 26, "start": 45, "end": 119, "text": "‘but that’s because it stays the same year for such a long time together.’", "speaker": "Alice", "explicit": true, "utterance": "U38"}
+{"id": "Q41", "paragraph": 27, "start": 0, "end": 35, "text": "‘Which is just the case with MINE,’", "speaker": "Hatter", "explicit": true, "utterance": "U39"}
+{"id": "Q42", "paragraph": 27, "start": 179, "end": 210, "text": "’I don‘t quite understand you,’", "speaker": "Alice", "explicit": false, "utterance": "U40"}
+{"id": "Q43", "paragraph": 28, "start": 0, "end": 31, "text": "‘The Dormouse is asleep again,’", "speaker": "Hatter", "explicit": true, "utterance": "U41"}
+{"id": "Q44", "paragraph": 29, "start": 77, "end": 140, "text": "‘Of course, of course; just what I was going to remark myself.’", "speaker": "Dormouse", "explicit": false, "utterance": "U42"}
+{"id": "Q45", "paragraph": 30, "start": 0, "end": 34, "text": "‘Have you guessed the riddle yet?’", "speaker": "Hatter", "explicit": true, "utterance": "U43"}
+{"id": "Q46", "paragraph": 31, "start": 0, "end": 19, "text": "‘No, I give it up,’", "speaker": "Alice", "explicit": true, "utterance": "U44"}
+{"id": "Q47", "paragraph": 31, "start": 35, "end": 55, "text": "‘what’s the answer?’", "speaker": "Alice", "explicit": true, "utterance": "U45"}
+{"id": "Q48", "paragraph": 31, "start": 56, "end": 87, "text": "‘I haven’t the slightest idea,’", "speaker": "Hatter", "explicit": true, "utterance": "U46"}
+{"id": "Q49", "paragraph": 32, "start": 0, "end": 8, "text": "‘Nor I,’", "speaker": "the March Hare", "explicit": true, "utterance": "U47"}
+{"id": "Q50", "paragraph": 33, "start": 22, "end": 76, "text": "‘I think you might do something better with the time,’", "speaker": "Alice", "explicit": false, "utterance": "U48"}
+{"id": "Q51", "paragraph": 33, "start": 87, "end": 142, "text": "‘than waste it in asking riddles that have no answers.’", "speaker": "Alice", "explicit": false, "utterance": "U49"}
+{"id": "Q52", "paragraph": 34, "start": 0, "end": 35, "text": "‘If you knew Time as well as I do,’", "speaker": "Hatter", "explicit": true, "utterance": "U50"}
+{"id": "Q53", "paragraph": 34, "start": 53, "end": 100, "text": "‘you wouldn’t talk about wasting IT. It‘s HIM.’", "speaker": "Hatter", "explicit": false, "utterance": "U51"}
+{"id": "Q54", "paragraph": 35, "start": 0, "end": 29, "text": "‘I don’t know what you mean,’", "speaker": "Alice", "explicit": true, "utterance": "U52"}
+{"id": "Q55", "paragraph": 36, "start": 0, "end": 114, "text": "‘Of course you don’t! the Hatter said, tossing his head contemptuously. ’I dare say you never even spoke to Time!’", "speaker": "Hatter", "explicit": true, "utterance": "U53"}
+{"id": "Q56", "paragraph": 37, "start": 0, "end": 14, "text": "‘Perhaps not,’", "speaker": "Alice", "explicit": false, "utterance": "U54"}
+{"id": "Q57", "paragraph": 37, "start": 41, "end": 93, "text": "‘but I know I have to beat time when I learn music.’", "speaker": "Alice", "explicit": false, "utterance": "U55"}
+{"id": "Q58", "paragraph": 38, "start": 0, "end": 27, "text": "‘Ah! that accounts for it,’", "speaker": "Hatter", "explicit": true, "utterance": "U56"}
+{"id": "Q59", "paragraph": 38, "start": 45, "end": 369, "text": "‘He won’t stand beating. Now, if you only kept on good terms with him, he‘d do almost anything you liked with the clock. For instance, suppose it were nine o’clock in the morning, just time to begin lessons: you‘d only have to whisper a hint to Time, and round goes the clock in a twinkling! Half-past one, time for dinner!’", "speaker": "Hatter", "explicit": false, "utterance": "U57"}
+{"id": "Q60", "paragraph": 39, "start": 1, "end": 22, "text": "‘I only wish it was,’", "speaker": "the March Hare", "explicit": true, "utterance": "U58"}
+{"id": "Q61", "paragraph": 40, "start": 0, "end": 33, "text": "‘That would be grand, certainly,’", "speaker": "Alice", "explicit": true, "utterance": "U59"}
+{"id": "Q62", "paragraph": 40, "start": 59, "end": 109, "text": "‘but then—I shouldn’t be hungry for it, you know.’", "speaker": "Alice", "explicit": false, "utterance": "U60"}
+{"id": "Q63", "paragraph": 41, "start": 0, "end": 24, "text": "‘Not at first, perhaps,’", "speaker": "Hatter", "explicit": true, "utterance": "U61"}
+{"id": "Q64", "paragraph": 41, "start": 42, "end": 104, "text": "‘but you could keep it to half-past one as long as you liked.’", "speaker": "Hatter", "explicit": false, "utterance": "U62"}
+{"id": "Q65", "paragraph": 42, "start": 0, "end": 29, "text": "‘Is that the way YOU manage?’", "speaker": "Alice", "explicit": true, "utterance": "U63"}
+{"id": "Q66", "paragraph": 43, "start": 38, "end": 46, "text": "‘Not I!’", "speaker": "Hatter", "explicit": false, "utterance": "U64"}
+{"id": "Q67", "paragraph": 43, "start": 59, "end": 248, "text": "‘We quarrelled last March—just before HE went mad, you know— ’ (pointing with his tea spoon at the March Hare,) ’—it was at the great concert given by the Queen of Hearts, and I had to sing", "speaker": "Hatter", "explicit": false, "utterance": "U65"}
+{"id": "Q68", "paragraph": 46, "start": 0, "end": 31, "text": "‘I’ve heard something like it,’", "speaker": "Alice", "explicit": true, "utterance": "U66"}
+{"id": "Q69", "paragraph": 47, "start": 0, "end": 23, "text": "‘It goes on, you know,’", "speaker": "Hatter", "explicit": true, "utterance": "U67"}
+{"id": "Q70", "paragraph": 47, "start": 46, "end": 60, "text": "’in this way:—", "speaker": "Hatter", "explicit": true, "utterance": "U68"}
+{"id": "Q71", "paragraph": 49, "start": 63, "end": 100, "text": "‘Twinkle, twinkle, twinkle, twinkle—’", "speaker": "Dormouse", "explicit": false, "utterance": "U69"}
+{"id": "Q72", "paragraph": 50, "start": 0, "end": 44, "text": "‘Well, I’d hardly finished the first verse,‘", "speaker": "Hatter", "explicit": true, "utterance": "U70"}
+{"id": "Q73", "paragraph": 50, "start": 62, "end": 150, "text": "’when the Queen jumped up and bawled out, ”He‘s murdering the time! Off with his head!”’", "speaker": "Alice", "explicit": false, "utterance": "U71"}
+{"id": "Q74", "paragraph": 51, "start": 0, "end": 24, "text": "‘How dreadfully savage!’", "speaker": "Alice", "explicit": true, "utterance": "U72"}
+{"id": "Q75", "paragraph": 52, "start": 0, "end": 22, "text": "‘And ever since that,’", "speaker": "Hatter", "explicit": true, "utterance": "U73"}
+{"id": "Q76", "paragraph": 52, "start": 62, "end": 119, "text": "‘he won’t do a thing I ask! It‘s always six o’clock now.’", "speaker": "Hatter", "explicit": false, "utterance": "U74"}
+{"id": "Q77", "paragraph": 53, "start": 38, "end": 95, "text": "’Is that the reason so many tea-things are put out here?’", "speaker": "Alice", "explicit": false, "utterance": "U75"}
+{"id": "Q78", "paragraph": 54, "start": 0, "end": 17, "text": "‘Yes, that’s it,‘", "speaker": "Hatter", "explicit": true, "utterance": "U76"}
+{"id": "Q79", "paragraph": 54, "start": 47, "end": 123, "text": "’it‘s always tea-time, and we’ve no time to wash the things between whiles.’", "speaker": "Alice", "explicit": false, "utterance": "U77"}
+{"id": "Q80", "paragraph": 55, "start": 0, "end": 40, "text": "‘Then you keep moving round, I suppose?’", "speaker": "Alice", "explicit": true, "utterance": "U78"}
+{"id": "Q81", "paragraph": 55, "start": 53, "end": 66, "text": "‘Exactly so,’", "speaker": "Hatter", "explicit": true, "utterance": "U79"}
+{"id": "Q82", "paragraph": 55, "start": 84, "end": 112, "text": "‘as the things get used up.’", "speaker": "Hatter", "explicit": false, "utterance": "U80"}
+{"id": "Q83", "paragraph": 55, "start": 113, "end": 169, "text": "‘But what happens when you come to the beginning again?’", "speaker": "Alice", "explicit": false, "utterance": "U81"}
+{"id": "Q84", "paragraph": 56, "start": 0, "end": 32, "text": "‘Suppose we change the subject,’", "speaker": "the March Hare", "explicit": true, "utterance": "U82"}
+{"id": "Q85", "paragraph": 56, "start": 70, "end": 138, "text": "‘I’m getting tired of this. I vote the young lady tells us a story.’", "speaker": "the March Hare", "explicit": false, "utterance": "U83"}
+{"id": "Q86", "paragraph": 57, "start": 0, "end": 30, "text": "‘I’m afraid I don‘t know one,’", "speaker": "Alice", "explicit": true, "utterance": "U84"}
+{"id": "Q87", "paragraph": 58, "start": 0, "end": 26, "text": "‘Then the Dormouse shall!’", "speaker": "UNKNOWN", "explicit": false, "utterance": "U85"}
+{"id": "Q88", "paragraph": 58, "start": 44, "end": 64, "text": "‘Wake up, Dormouse!’", "speaker": "UNKNOWN", "explicit": false, "utterance": "U86"}
+{"id": "Q89", "paragraph": 59, "start": 37, "end": 55, "text": "‘I wasn’t asleep,‘", "speaker": "Dormouse", "explicit": false, "utterance": "U87"}
+{"id": "Q90", "paragraph": 59, "start": 91, "end": 136, "text": "’I heard every word you fellows were saying.’", "speaker": "Dormouse", "explicit": false, "utterance": "U88"}
+{"id": "Q91", "paragraph": 60, "start": 0, "end": 18, "text": "‘Tell us a story!’", "speaker": "the March Hare", "explicit": true, "utterance": "U89"}
+{"id": "Q92", "paragraph": 61, "start": 0, "end": 17, "text": "‘Yes, please do!’", "speaker": "Alice", "explicit": false, "utterance": "U90"}
+{"id": "Q93", "paragraph": 62, "start": 0, "end": 24, "text": "‘And be quick about it,’", "speaker": "Hatter", "explicit": true, "utterance": "U91"}
+{"id": "Q94", "paragraph": 62, "start": 43, "end": 88, "text": "‘or you’ll be asleep again before it‘s done.’", "speaker": "Hatter", "explicit": false, "utterance": "U92"}
+{"id": "Q95", "paragraph": 63, "start": 0, "end": 51, "text": "‘Once upon a time there were three little sisters,’", "speaker": "Dormouse", "explicit": true, "utterance": "U93"}
+{"id": "Q96", "paragraph": 63, "start": 89, "end": 177, "text": "‘and their names were Elsie, Lacie, and Tillie; and they lived at the bottom of a well—’", "speaker": "Dormouse", "explicit": false, "utterance": "U94"}
+{"id": "Q97", "paragraph": 64, "start": 0, "end": 24, "text": "‘What did they live on?’", "speaker": "Alice", "explicit": true, "utterance": "U95"}
+{"id": "Q98", "paragraph": 65, "start": 0, "end": 24, "text": "‘They lived on treacle,’", "speaker": "Dormouse", "explicit": true, "utterance": "U96"}
+{"id": "Q99", "paragraph": 66, "start": 0, "end": 41, "text": "‘They couldn’t have done that, you know,‘", "speaker": "Alice", "explicit": false, "utterance": "U97"}
+{"id": "Q100", "paragraph": 66, "start": 65, "end": 88, "text": "’they‘d have been ill.’", "speaker": "Alice", "explicit": false, "utterance": "U98"}
+{"id": "Q101", "paragraph": 67, "start": 0, "end": 15, "text": "‘So they were,’", "speaker": "Dormouse", "explicit": true, "utterance": "U99"}
+{"id": "Q102", "paragraph": 67, "start": 35, "end": 46, "text": "‘VERY ill.’", "speaker": "Dormouse", "explicit": false, "utterance": "U100"}
+{"id": "Q103", "paragraph": 68, "start": 134, "end": 182, "text": "‘But why did they live at the bottom of a well?’", "speaker": "Alice", "explicit": false, "utterance": "U101"}
+{"id": "Q104", "paragraph": 69, "start": 0, "end": 21, "text": "‘Take some more tea,’", "speaker": "the March Hare", "explicit": true, "utterance": "U102"}
+{"id": "Q105", "paragraph": 70, "start": 0, "end": 23, "text": "‘I’ve had nothing yet,‘", "speaker": "Alice", "explicit": true, "utterance": "U103"}
+{"id": "Q106", "paragraph": 70, "start": 59, "end": 82, "text": "’so I can‘t take more.’", "speaker": "Alice", "explicit": false, "utterance": "U104"}
+{"id": "Q107", "paragraph": 71, "start": 0, "end": 31, "text": "‘You mean you can’t take LESS,‘", "speaker": "Hatter", "explicit": true, "utterance": "U105"}
+{"id": "Q108", "paragraph": 71, "start": 49, "end": 92, "text": "’it‘s very easy to take MORE than nothing.’", "speaker": "Hatter", "explicit": false, "utterance": "U106"}
+{"id": "Q109", "paragraph": 72, "start": 0, "end": 28, "text": "‘Nobody asked YOUR opinion,’", "speaker": "Alice", "explicit": true, "utterance": "U107"}
+{"id": "Q110", "paragraph": 73, "start": 0, "end": 36, "text": "‘Who’s making personal remarks now?’", "speaker": "Hatter", "explicit": true, "utterance": "U108"}
+{"id": "Q111", "paragraph": 74, "start": 162, "end": 206, "text": "‘Why did they live at the bottom of a well?’", "speaker": "Alice", "explicit": false, "utterance": "U109"}
+{"id": "Q112", "paragraph": 75, "start": 74, "end": 98, "text": "‘It was a treacle-well.’", "speaker": "Dormouse", "explicit": false, "utterance": "U110"}
+{"id": "Q113", "paragraph": 76, "start": 0, "end": 23, "text": "‘There’s no such thing!", "speaker": "Alice", "explicit": false, "utterance": "U111"}
+{"id": "Q114", "paragraph": 76, "start": 0, "end": 209, "text": "‘There’s no such thing! Alice was beginning very angrily, but the Hatter and the March Hare went ’Sh! sh! and the Dormouse sulkily remarked, ’If you can‘t be civil, you’d better finish the story for yourself.’", "speaker": "Alice", "explicit": false, "utterance": "U112"}
+{"id": "Q115", "paragraph": 76, "start": 97, "end": 105, "text": "’Sh! sh!", "speaker": "UNKNOWN", "explicit": false, "utterance": "U113"}
+{"id": "Q116", "paragraph": 76, "start": 141, "end": 209, "text": "’If you can‘t be civil, you’d better finish the story for yourself.’", "speaker": "Dormouse", "explicit": false, "utterance": "U114"}
+{"id": "Q117", "paragraph": 77, "start": 0, "end": 19, "text": "‘No, please go on!’", "speaker": "Alice", "explicit": true, "utterance": "U115"}
+{"id": "Q118", "paragraph": 77, "start": 44, "end": 99, "text": "‘I won’t interrupt again. I dare say there may be ONE.’", "speaker": "Alice", "explicit": false, "utterance": "U116"}
+{"id": "Q119", "paragraph": 78, "start": 0, "end": 14, "text": "‘One, indeed!’", "speaker": "Dormouse", "explicit": true, "utterance": "U117"}
+{"id": "Q120", "paragraph": 78, "start": 78, "end": 151, "text": "‘And so these three little sisters—they were learning to draw, you know—’", "speaker": "Dormouse", "explicit": false, "utterance": "U118"}
+{"id": "Q121", "paragraph": 79, "start": 0, "end": 21, "text": "‘What did they draw?’", "speaker": "Alice", "explicit": true, "utterance": "U119"}
+{"id": "Q122", "paragraph": 79, "start": 64, "end": 74, "text": "‘Treacle,’", "speaker": "Dormouse", "explicit": true, "utterance": "U120"}
+{"id": "Q123", "paragraph": 80, "start": 0, "end": 21, "text": "‘I want a clean cup,’", "speaker": "Hatter", "explicit": true, "utterance": "U121"}
+{"id": "Q124", "paragraph": 80, "start": 46, "end": 76, "text": "‘let’s all move one place on.’", "speaker": "Hatter", "explicit": false, "utterance": "U122"}
+{"id": "Q125", "paragraph": 82, "start": 79, "end": 142, "text": "‘But I don’t understand. Where did they draw the treacle from?’", "speaker": "Alice", "explicit": false, "utterance": "U123"}
+{"id": "Q126", "paragraph": 83, "start": 0, "end": 41, "text": "‘You can draw water out of a water-well,’", "speaker": "Hatter", "explicit": true, "utterance": "U124"}
+{"id": "Q127", "paragraph": 83, "start": 59, "end": 135, "text": "‘so I should think you could draw treacle out of a treacle-well—eh, stupid?’", "speaker": "Hatter", "explicit": false, "utterance": "U125"}
+{"id": "Q128", "paragraph": 84, "start": 0, "end": 28, "text": "‘But they were IN the well,’", "speaker": "Alice", "explicit": true, "utterance": "U126"}
+{"id": "Q129", "paragraph": 85, "start": 0, "end": 21, "text": "‘Of course they were’", "speaker": "Dormouse", "explicit": true, "utterance": "U127"}
+{"id": "Q130", "paragraph": 85, "start": 42, "end": 53, "text": "‘—well in.’", "speaker": "Dormouse", "explicit": false, "utterance": "U128"}
+{"id": "Q131", "paragraph": 86, "start": 0, "end": 29, "text": "‘They were learning to draw,’", "speaker": "Dormouse", "explicit": true, "utterance": "U129"}
+{"id": "Q132", "paragraph": 86, "start": 114, "end": 184, "text": "‘and they drew all manner of things—everything that begins with an M—’", "speaker": "Dormouse", "explicit": false, "utterance": "U130"}
+{"id": "Q133", "paragraph": 87, "start": 0, "end": 16, "text": "‘Why with an M?’", "speaker": "Alice", "explicit": true, "utterance": "U131"}
+{"id": "Q134", "paragraph": 88, "start": 0, "end": 10, "text": "‘Why not?’", "speaker": "the March Hare", "explicit": true, "utterance": "U132"}
+{"id": "Q135", "paragraph": 90, "start": 167, "end": 360, "text": "‘—that begins with an M, such as mouse-traps, and the moon, and memory, and muchness—you know you say things are ”much of a muchness”— did you ever see such a thing as a drawing of a muchness?’", "speaker": "Dormouse", "explicit": false, "utterance": "U133"}
+{"id": "Q136", "paragraph": 91, "start": 0, "end": 25, "text": "‘Really, now you ask me,’", "speaker": "Alice", "explicit": true, "utterance": "U134"}
+{"id": "Q137", "paragraph": 91, "start": 58, "end": 74, "text": "‘I don’t think—’", "speaker": "Alice", "explicit": false, "utterance": "U135"}
+{"id": "Q138", "paragraph": 92, "start": 0, "end": 26, "text": "‘Then you shouldn’t talk,’", "speaker": "Hatter", "explicit": true, "utterance": "U136"}
+{"id": "Q139", "paragraph": 94, "start": 0, "end": 39, "text": "‘At any rate I’ll never go THERE again!", "speaker": "Alice", "explicit": false, "utterance": "U137"}
+{"id": "Q140", "paragraph": 94, "start": 0, "end": 151, "text": "‘At any rate I’ll never go THERE again! said Alice as she picked her way through the wood. ’It‘s the stupidest tea-party I ever was at in all my life!’", "speaker": "Alice", "explicit": false, "utterance": "U138"}
+{"id": "Q141", "paragraph": 94, "start": 91, "end": 151, "text": "’It‘s the stupidest tea-party I ever was at in all my life!’", "speaker": "Alice", "explicit": false, "utterance": "U139"}
+{"id": "Q142", "paragraph": 96, "start": 83, "end": 119, "text": "‘Now, I’ll manage better this time,’", "speaker": "Alice", "explicit": false, "utterance": "U140"}
