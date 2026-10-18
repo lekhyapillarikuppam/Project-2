@@ -1504,7 +1504,9 @@
    "gender": "male"
   },
   "Maggie MacNab": {
-   "aliases": [],
+   "aliases": [
+    "Maggie"
+   ],
    "gender": "female"
   },
   "James Todhunter": {
@@ -1522,6 +1524,6 @@
    "gender": "male"
   }
  },
- "cursor": 11,
+ "cursor": 12,
  "done": false
 }

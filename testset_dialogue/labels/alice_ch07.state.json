@@ -428,10 +428,10 @@
    "e": 179,
    "origin": "candidate",
    "decision": "quote",
-   "speaker": "the March Hare",
+   "speaker": null,
    "explicit": false,
    "hint": false,
-   "same": false
+   "same": true
   },
   {
    "key": "c23:187:222",
@@ -1772,6 +1772,6 @@
    "gender": "male"
   }
  },
- "cursor": 119,
+ "cursor": 36,
  "done": false
 }

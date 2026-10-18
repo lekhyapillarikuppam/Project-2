@@ -12,7 +12,9 @@
     "gender": "male"
   },
   "Maggie MacNab": {
-    "aliases": [],
+    "aliases": [
+      "Maggie"
+    ],
     "gender": "female"
   },
   "James Todhunter": {
