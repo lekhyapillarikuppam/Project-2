@@ -1,7 +1,7 @@
 # AI-Powered Audiobook Generator — Specification (v1)
 
 Course: UMC301 Applied Data Science and Artificial Intelligence — Project 2
-Status: revision 9 (2026-10-18, v2 spec revised after Phase 6.0 review). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
+Status: revision 10 (2026-10-18, Phase 6.1 interpretations recorded; v2 phases regrouped into 6.2 and 6.3; model selection rule fixed in advance). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
 
 ---
 
@@ -407,12 +407,15 @@ v1 behaviour is unchanged and stays the default. v2 adds an opt-in **character v
 Turns each paragraph's single narrator segment into alternating `narration` and `quote` segments. Rules:
 1. **Quote style per document**: for each family — double (`“ ” "`) and single (`‘ ’ '`) — count the marks that are **not** apostrophes (rule 2) per 1,000 words. The family with the higher rate is the document's dialogue family, provided it has at least 2 marks per 1,000 words (otherwise the document has no dialogue and every segment stays narration). Curly and straight marks of the family are treated alike. The other family is ordinary text inside quotes (so `'` inside a double-quote book is never a boundary).
    - **Open vs close is decided by position, never by glyph** (PDFs swap curly marks, e.g. `table,‘ said Alice; ’it‘s`): a mark is an *opener* if it is at paragraph start or follows whitespace, `(`, `[`, `—`, `–`, and is followed by a non-space; it is a *closer* if it follows a non-space and is followed by whitespace, punctuation or paragraph end. A mark that is both or neither is resolved by the current state (inside a quote → closer, outside → opener).
-2. **Apostrophes (single family only)**: any of `' ‘ ’` is an apostrophe, never a boundary, when it is (a) between two letters (`don't`, `Alice's`, `doesn‘t`); (b) the start of a word in the leading-elision list (`'tis 'twas 'em 'cause 'til 'twere 'ere 'ow 'e`); (c) after `s` at the end of a word **while no quote is open** (plural possessive `the Queens' `); (d) at the end of a word in the trailing-elision list (`o' an' talkin' nothin' somethin' goin' ol'`, plus any word ending `in'`). The two lists are named constants; additions must be justified by the dev set and reported.
+2. **Apostrophes (single family only)**: any of `' ‘ ’` is an apostrophe, never a boundary, when it is (a) between two letters (`don't`, `Alice's`, `doesn‘t`); (b) the start of a word in the leading-elision list (`'tis 'twas 'em 'cause 'til 'twere 'ere 'ow 'e`); (c) after `s` at the end of a word **while no quote is open** (plural possessive `the Queens' `); (d) at the end of a word in the trailing-elision list (`o' an' talkin' nothin' somethin' goin' ol'`, plus any word ending `in'` of 4+ letters that is followed by a space and a lowercase word that is not a speech verb, e.g. `goin' home`; taken literally, the bare `in'` rule would swallow closers after `again`, `begin`, `within`). The two lists are named constants; additions must be justified by the dev set and reported.
 3. **Multi-paragraph quotes**: a paragraph that ends inside an open quote, followed by a paragraph that starts with an opening mark, continues the same utterance (typographic convention) — **unless** the next paragraph contains an explicit speech tag naming a speaker (`said X`, `X said`), in which case the open quote is closed at the end of the first paragraph (damaged-PDF case: missing closing mark).
-4. **Broken quotes**: `“Well,” said Alice, “I suppose so.”` → two quote segments around a narration segment; both belong to one **utterance** id (they share a speaker).
+   - **3b. In-paragraph damaged closer** (added in Phase 6.1): while a quote is open, one of `! ? , . ;` followed by whitespace and a speech tag (`said Alice`, `the Hatter said`, `Alice said`, a lowercase pronoun + verb such as `she thought`, optionally with an `-ly` adverb or a leading `and`) closes the quote right after the punctuation. Case-sensitive: a new sentence inside a quote would be capitalised. Known risk: reported speech inside a correctly closed quote (`‘…, said I, …’`).
+   - An opener-only mark while a quote is already open closes the open quote just before it and starts a new one (counted as `reopened`).
+4. **Broken quotes**: `“Well,” said Alice, “I suppose so.”` → two quote segments around a narration segment; both belong to one **utterance** id (they share a speaker). Two quotes in one paragraph are one utterance unless the second has its own speech tag right after it, or the narration between them ends a sentence and introduces it (`The Hatter said, ‘…’`).
 5. Quote spans **include** their marks (start at the opener, end after the closer). Marks are stripped before TTS. Nested quotes (the other family) inside a quote stay part of the outer quote.
 5a. **Labelling conventions** (also used by the evaluation): quoted thoughts (`‘…,’ thought Alice`) are utterances of the thinker; speech by several characters at once (`‘No room!’ they cried`) is `UNKNOWN`; quoted writing that nobody says aloud (a label `‘DRINK ME’`, a quoted word inside narration) is **not** an utterance.
 6. Unbalanced quote at paragraph end without a continuation → close it at paragraph end and log a warning count.
+Interface: `find_quote_spans(paragraphs, family)` is the shared core (also used by the evaluation); `segment_chapter(chapter, family) -> (Chapter, SegmentStats)`.
 Output: segments carry `kind` (`narration` | `quote`), `utterance_id` (quotes only), and `speaker` (`"narrator"` for narration; filled by attribution for quotes; `"narrator"` if unknown — D33).
 
 ### 15.3 Speaker attribution (`app/dialogue/attribute.py`)
@@ -428,16 +431,18 @@ Two methods behind one interface; both return, per utterance, a speaker name or 
 **LLM (Groq, D32)**:
 - **Per chapter, ahead of narration** (D37): chapter N+1 is attributed while chapter N is narrated; chapter 1 is attributed before narration starts. Within a chapter, windows of consecutive paragraphs up to `LLM_WINDOW_WORDS` (default 1,200) that never split an utterance (a multi-paragraph quote or a broken quote stays in one window), plus the previous 2 paragraphs as read-only context **without** ids. Utterances are numbered `Q1…Qn` inline as `[Q3]‘…’`.
 - Output format is terse: `{"q":{"Q1":"Alice","Q2":"UNKNOWN"},"new":[{"name":"Dormouse","gender":"male","aliases":[]}]}` — speakers for every id, plus only characters not already in the supplied list. The supplied running list is capped at the 30 most frequent characters (name + gender only), so prompts don't grow without bound. Model "thinking"/reasoning output is disabled where the model allows it.
-- One request per window: system + user prompt asking for strict JSON:
-  `{"quotes":[{"id":"Q1","speaker":"Alice"}, …], "characters":[{"name":"Alice","aliases":["Miss Alice"],"gender":"female"}, …]}`; `speaker` is a character name or `"UNKNOWN"`. The running character list from earlier windows is included so names stay consistent. `temperature 0`, JSON response format.
+- One request per window (system + user prompt), `temperature 0`, JSON response format. `speaker` is a name from the supplied list, a name in `new`, or `"UNKNOWN"`. The prompt states the §15.2 rule 5a conventions (thoughts → thinker, group speech → UNKNOWN).
 - Validation: every id answered exactly once, speakers non-empty strings; otherwise one retry with the validation error appended; then the **baseline** result is used for that window (D34).
 - Rate limiting is **token-based**: estimate each request's tokens (prompt chars ÷ 4 + expected output) and keep a rolling 60 s budget of `LLM_TOKENS_PER_MINUTE` (default 7,000, below Groq's 8,000); also honour `x-ratelimit-remaining-tokens`, `x-ratelimit-reset-tokens`, `retry-after` and 429. `LLM_MAX_REQUESTS_PER_DAY` (default 800) caps daily use. If the daily budget is exhausted, or a window waits more than 120 s for budget, that window uses the baseline (D34).
 - Requests use `httpx` against Groq's OpenAI-compatible endpoint (no new SDK dependency). Model from `LLM_MODEL`.
-- Results cached per job (window hash → response) so a retry never pays twice.
+- Results cached per job (window hash → response) so a retry never pays twice. The evaluation additionally caches responses on disk (`backend/storage/llm_cache/`, gitignored, keyed by model + prompt hash) so re-scoring never calls Groq again.
+- Every request records prompt tokens, completion tokens (from the response `usage`) and latency, for the evaluation.
 
-**Model choice**: `LLM_MODEL` is chosen in Phase 6.2 by evaluating the candidate models Groq currently offers (initially `qwen/qwen3.8-27b` and `openai/gpt-oss-120b`) on the dev chapters for accuracy, tokens per window and latency (D32).
-
-**Combining (production method)**: decided by the dev-set evaluation in Phase 6.2 and recorded as a decision: one of `llm`, `baseline`, or `llm_with_baseline_override` (an explicit `said NAME` tag wins over the LLM).
+**Model choice and combining method — selection rule fixed before any results (D39)**:
+- Candidates: `baseline`; and for each model (initially `qwen/qwen3.8-27b` with thinking disabled, `openai/gpt-oss-120b` at its lowest reasoning effort) the methods `llm` and `llm_with_baseline_override` (an explicit `said NAME` / `NAME said` / `said the NOUN` tag found by the baseline wins over the LLM).
+- Score: **micro voice accuracy** on the dev chapters (§15.9).
+- Pick the highest. Every candidate within **2 percentage points** of the best is a tie; among ties prefer, in order: fewer total tokens on the dev set, then lower median window latency, then `llm_with_baseline_override` over `llm`.
+- The result is recorded as D40 (model, method, the scores table) and becomes the default `LLM_MODEL` / `ATTRIBUTION_METHOD`. Prompt and rules are frozen after this; the held-out chapter is then run once (Phase 6.3).
 
 ### 15.4 Cast building (`app/dialogue/cast.py`)
 - Canonical name normalisation: strip leading `the`, honorifics (Mr, Mrs, Miss, Dr, Professor, Sir, Lady, Father), punctuation; casefold.
@@ -478,6 +483,7 @@ Two methods behind one interface; both return, per utterance, a speaker name or 
   - **Attribution accuracy** on matched utterances (speaker equal after alias mapping), split into **explicit** (gold `explicit: true`) and **implicit**; also % predicted UNKNOWN.
   - **Voice accuracy** (what the listener hears): using the system's own voice map for the chapter, the *expected* voice of a gold utterance is the voice the system assigned to the gold speaker's character (matched by alias), else the minor voice for the gold speaker's gender, else the narrator voice if gold is `UNKNOWN`; a matched utterance is voice-correct if its synthesized voice equals the expected voice.
   - For each method: baseline, llm, llm_with_baseline_override; plus LLM requests and seconds per chapter.
+- **Label lint** (`label_dialogue.py --lint`): label-file-only checks (no segmenter): overlapping gold spans (error), spans that don't start/end at a quote mark, spans that may contain narration (punctuation + speech tag inside the span), `Not a quote` decisions followed by `thought`, and adjacent spans separated by a speech tag that don't share an utterance (warnings).
 - Sets: dev = `alice_ch07`, `brown_glass`; **held-out = `ball_ch03`** (never inspected during development; first run reported — D25 applies).
 
 ## 16. Repository structure

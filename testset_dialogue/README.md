@@ -62,7 +62,11 @@ run the same command again to continue where you left off.
    **Full chapter** view shows all of them) and click **Add selection as missed quote**.
 4. Cast panel: rename, set gender, add aliases (`the Hatter, Hatter`), remove unused characters.
 5. **Export / Done** checks that every candidate is decided and every speaker is in the cast, and
-   lists any problems.
+   lists any problems; it also runs the label lint and refuses on lint errors (warnings are shown
+   and allowed, and each finding links to its paragraph). Check saved files without the page:
+   `python scriptsabel_dialogue.py --lint ..	estset_dialogue	ext<name>.json`. Use the
+   **Go to** box (`¶12` or `#40`, key `G`) to reach any paragraph or item; spans you added can be
+   deleted (`Del`).
 
 Conventions (D38, SPEC §15.2 rule 5a), the same for all three chapters:
 - quoted thoughts (`‘Very uncomfortable for the Dormouse,’ thought Alice`) are utterances of the thinker;

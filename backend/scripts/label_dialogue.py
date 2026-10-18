@@ -23,6 +23,7 @@ import re
 import sys
 import threading
 import webbrowser
+from dataclasses import asdict, dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -203,6 +204,118 @@ def validate(paragraphs: list[str], items: list[dict[str, Any]], cast: dict[str,
     return errors
 
 
+# --- lint (SPEC §15.9): checks on the label files only, independent of app.dialogue ---------------
+
+FAMILY_OF_STYLE = {"curly_double": "double", "straight_double": "double",
+                   "curly_single": "single", "straight_single": "single"}  # fmt: skip
+FAMILY_MARK_SET = {"double": "“”\"", "single": "‘’'"}
+LINT_EXCERPT_CHARS = 60
+THOUGHT_LOOKAHEAD_CHARS = 25
+_LINT_VERB = rf"(?:{_VERBS})\b"
+_LINT_SUBJECT = r"(?:the\s+[a-z][\w-]*(?:\s+[A-Za-z][\w-]*)?|the\s+[A-Z][\w’'-]*(?:\s+[A-Z][\w’'-]*)*|(?!The\b)[A-Z][\w’'-]*(?:\s+[A-Z][\w’'-]*)*|he|she|they|I|we|you)"
+# Inside a span: punctuation, then a speech tag (`! said Alice`, `, the Hatter said`, `! she thought`).
+_NARRATION_IN_SPAN = re.compile(
+    rf"[!?,.;]\s+(?:and\s+)?(?:{_LINT_VERB}\s+{_LINT_SUBJECT}|{_LINT_SUBJECT}(?:\s+[a-z]+ly)?\s+{_LINT_VERB})"
+)
+_HAS_VERB = re.compile(rf"\b{_LINT_VERB}", re.IGNORECASE)
+
+
+@dataclass
+class Finding:
+    level: str  # "error" | "warn"
+    chapter: str
+    paragraph: int
+    start: int
+    end: int
+    excerpt: str
+    problem: str
+
+    def line(self) -> str:
+        return (f"{self.level.upper():<5} {self.chapter} ¶{self.paragraph} [{self.start}:{self.end}] "
+                f"`{self.excerpt}` — {self.problem}")  # fmt: skip
+
+
+def _excerpt(text: str) -> str:
+    text = text.replace("\n", " ")
+    return text if len(text) <= LINT_EXCERPT_CHARS else text[: LINT_EXCERPT_CHARS - 1] + "…"
+
+
+def lint_labels(
+    chapter: str,
+    paragraphs: list[str],
+    lines: list[dict[str, Any]],
+    cast: dict[str, dict[str, Any]],
+    items: list[dict[str, Any]] | None,
+) -> list[Finding]:
+    """Label-only checks: gold `lines` (the .jsonl), the cast, and the tool's items (.state.json)."""
+    family = FAMILY_OF_STYLE[dominant_style(paragraphs)]
+    marks = FAMILY_MARK_SET[family]
+    known = cast_lookup(cast)
+    findings: list[Finding] = []
+
+    def add(level: str, line: dict[str, Any], problem: str) -> None:
+        p, s, e = line["paragraph"], line["start"], line["end"]
+        findings.append(Finding(level, chapter, p, s, e, _excerpt(paragraphs[p][s:e]), problem))
+
+    by_paragraph: dict[int, list[dict[str, Any]]] = {}
+    for line in sorted(lines, key=lambda x: (x["paragraph"], x["start"], x["end"])):
+        p, s, e = line["paragraph"], line["start"], line["end"]
+        if not (0 <= p < len(paragraphs) and 0 <= s < e <= len(paragraphs[p])):
+            findings.append(Finding("error", chapter, p, s, e, "", "span out of range"))
+            continue
+        by_paragraph.setdefault(p, []).append(line)
+        text = paragraphs[p][s:e]
+        if line["speaker"] != UNKNOWN and line["speaker"].casefold() not in known:
+            add("error", line, f"speaker {line['speaker']!r} is not in the cast")
+        if text[0] not in marks or text[-1] not in marks:
+            where = " and ".join(w for w, ok in (("start", text[0] in marks), ("end", text[-1] in marks)) if not ok)
+            add("warn", line, f"does not {where} with a {family} quote mark")
+        if _NARRATION_IN_SPAN.search(text):
+            add("warn", line, "may contain narration (punctuation + speech tag inside the span)")
+
+    for p, row in by_paragraph.items():
+        for a, b in zip(row, row[1:]):
+            if b["start"] < a["end"]:
+                add("error", b, f"overlaps the span [{a['start']}:{a['end']}] in the same paragraph")
+                continue
+            between = paragraphs[p][a["end"] : b["start"]].strip()
+            if a["utterance"] != b["utterance"] and _HAS_VERB.search(between) and between[-1:] in ",—:":
+                add("warn", b, f"possible broken quote: tag `{_excerpt(between)}` between this and the previous "
+                               "span, but the utterances differ (Same utterance?)")  # fmt: skip
+
+    for it in items or []:
+        if it["decision"] == "not_quote":
+            after = paragraphs[it["p"]][it["e"] : it["e"] + THOUGHT_LOOKAHEAD_CHARS]
+            if "thought" in after.casefold():
+                fake = {"paragraph": it["p"], "start": it["s"], "end": it["e"]}
+                add("warn", fake, "marked Not a quote but followed by `thought` (D38: thoughts belong to the thinker)")
+
+    findings.sort(key=lambda f: (f.paragraph, f.start, f.level))
+    return findings
+
+
+def lint_files(text_path: Path, labels_dir: Path = LABELS_DIR) -> list[Finding]:
+    name = text_path.stem
+    paragraphs = json.loads(text_path.read_text(encoding="utf-8"))["paragraphs"]
+    jsonl = labels_dir / f"{name}.jsonl"
+    if not jsonl.exists():
+        return [Finding("error", name, 0, 0, 0, "", f"{jsonl.name} not found")]
+    lines = [json.loads(x) for x in jsonl.read_text(encoding="utf-8").splitlines() if x.strip()]
+    cast_path, state_path = labels_dir / f"{name}.cast.json", labels_dir / f"{name}.state.json"
+    cast = json.loads(cast_path.read_text(encoding="utf-8")) if cast_path.exists() else {}
+    items = json.loads(state_path.read_text(encoding="utf-8"))["items"] if state_path.exists() else None
+    return lint_labels(name, paragraphs, lines, cast, items)
+
+
+def run_lint(text_path: Path, labels_dir: Path = LABELS_DIR) -> int:
+    findings = lint_files(text_path, labels_dir)
+    for f in findings:
+        print(f.line())
+    errors = sum(f.level == "error" for f in findings)
+    print(f"{text_path.stem}: {errors} error(s), {len(findings) - errors} warning(s)")
+    return 1 if errors else 0
+
+
 class Store:
     """Files for one chapter; writes are serialised and atomic."""
 
@@ -238,13 +351,20 @@ class Store:
             return {"ok": True, "decided": sum(it["decision"] is not None for it in self.state["items"])}
 
     def finish(self) -> dict[str, Any]:
+        """Validate and lint; Done is refused on errors (lint warnings are returned, not blocking)."""
         with self.lock:
-            errors = validate(self.paragraphs, self.state["items"], self.state["cast"])
+            items, cast = self.state["items"], self.state["cast"]
+            lines = gold_lines(self.paragraphs, items)
+            errors = validate(self.paragraphs, items, cast)
+            findings = [] if errors else lint_labels(self.name, self.paragraphs, lines, cast, items)
+            errors += [f.line() for f in findings if f.level == "error"]
             self.state["done"] = not errors
             self._write()
-            lines = gold_lines(self.paragraphs, self.state["items"])
-            return {"ok": not errors, "errors": errors, "quotes": len(lines),
-                    "utterances": len({line["utterance"] for line in lines})}  # fmt: skip
+            return {
+                "ok": not errors, "errors": errors, "quotes": len(lines),
+                "utterances": len({line["utterance"] for line in lines}),
+                "findings": [asdict(f) for f in findings],
+            }  # fmt: skip
 
     def _write(self) -> None:
         self.labels_dir.mkdir(parents=True, exist_ok=True)
@@ -310,10 +430,16 @@ def main() -> None:
     parser.add_argument("text_file", type=Path, help="testset_dialogue/text/<name>.json")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--lint", action="store_true", help="check the label files and exit (no server)")
+    parser.add_argument("--labels-dir", type=Path, default=LABELS_DIR, help=argparse.SUPPRESS)  # for testing
     args = parser.parse_args()
 
+    if args.lint:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.exit(run_lint(args.text_file.resolve(), args.labels_dir))
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    store = Store(args.text_file.resolve())
+    store = Store(args.text_file.resolve(), args.labels_dir)
     items = store.state["items"]
     logger.info(
         "%s: %d paragraphs, quote style %s, %d items (%d decided). Labels: %s",
