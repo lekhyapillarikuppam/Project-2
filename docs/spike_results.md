@@ -111,3 +111,23 @@ should stay near the *Alice* figures.
   calls the Azure API; the API answers the Vercel origin with
   `Access-Control-Allow-Origin: https://project-2-eight-azure.vercel.app`; `/api/config` reports
   `tts_fallback: none`.
+
+## Production check (v2, Phase 6.3, 2026-10-19)
+
+- **Backend**: the Azure VM redeployed with `GROQ_API_KEY` and the v2 settings (`LLM_MODEL=qwen/qwen3.8-27b`,
+  `ATTRIBUTION_METHOD=llm`, `LLM_TOKENS_PER_MINUTE=7000`, `LLM_OUTPUT_TOKENS_PER_MINUTE=1000`,
+  `LLM_MAX_REQUESTS_PER_DAY=800`, `MAX_CAST=8`). **Frontend**: Vercel redeployed from the push.
+- **Checked by the user, laptop and phone on mobile data — passed**:
+  - `/sample/characters` plays, with the cast list (Alice, Hatter, Dormouse, March Hare);
+  - the upload page shows "Character voices (beta)" with the privacy line (D36);
+  - `05_styles.docx` in characters mode showed "Finding the characters…", then chapter 1 played
+    with distinct voices and a correct cast list;
+  - `06_no_styles.docx` in single-narrator mode behaved as before (v1 path).
+- **VM memory** (`docker stats` during the characters job): api container 110 → 120 → **195 MiB** of
+  837 MiB (peak 23%), caddy ≤ 37 MiB. No restart, no OOM.
+- **Checked from the command line**: `/api/config` reports `character_voices_available: true` and
+  `tts_fallback: none`; Vercel serves `/sample/characters` (the rewrite), its `job.json`, `cast.json`
+  and `ch_007.mp3` (6.0 MB, `audio/mpeg`) with 200.
+- **Local full-book measurement** (Phase 6.3, same code, real Groq): *Alice* in characters mode
+  through the API in 12 min 21 s, chapter 1 playable after 1 min, 27 windows with 0 baseline
+  fallbacks and 4 short 429 waits (4–12 s), peak process RSS 115 MB.

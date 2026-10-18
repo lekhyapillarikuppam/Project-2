@@ -350,7 +350,7 @@ results (D39).
 - Depends on a free third-party service and sends the text to it; when it is down, the rules take
   over with lower accuracy.
 - Evaluated on three chapters only (two dev, one held-out): the numbers are indicative, not precise.
-- Production memory during a characters job on the VM: _to be filled in after the production check_.
+- Memory is not a limit: during a characters job on the VM the api container peaked at 195 MiB of 837 MiB (23%); caddy ≤ 37 MiB (see `docs/spike_results.md`, "Production check (v2)").
 
 ---
 

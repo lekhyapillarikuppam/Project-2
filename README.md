@@ -199,7 +199,9 @@ audio):
 | Peak memory of the app process | **115 MB** | 131 MB (VM) |
 
 For the largest allowed book (100,000 words) expect roughly 30–60 minutes of attribution; listening
-can start after chapter 1, but later chapters may wait for their speakers.
+can start after chapter 1, but later chapters may wait for their speakers. On the production VM a
+characters-mode job peaked at 195 MiB for the API container (23% of the VM's 837 MiB); details in
+[`docs/spike_results.md`](docs/spike_results.md).
 
 ## Limits and non-goals
 - Limits: `.pdf`/`.docx` only, 50 MB, 200 PDF pages, 100,000 words; one job at a time with up to 3
