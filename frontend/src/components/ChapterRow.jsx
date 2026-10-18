@@ -7,6 +7,12 @@ const STATUS_LABEL = {
   failed: 'failed',
 }
 
+// Character voices (SPEC §15.8): chapters whose speakers came from the rule-based fallback (D34).
+const ATTRIBUTION_NOTE = {
+  baseline: 'Speakers found with the simpler rule-based method',
+  mixed: 'Some speakers found with the simpler rule-based method',
+}
+
 /** One table-of-contents line: play, number, title …… duration, status, download. */
 export default function ChapterRow({ chapter, number, isCurrent, isPlaying, onPlay, downloadHref, downloadName }) {
   const ready = chapter.status === 'ready'
@@ -47,6 +53,7 @@ export default function ChapterRow({ chapter, number, isCurrent, isPlaying, onPl
           )}
         </div>
         {failed && <p className="chapter-row__error">Narration failed for this chapter</p>}
+        {ATTRIBUTION_NOTE[chapter.attribution] && <p className="chapter-row__note">{ATTRIBUTION_NOTE[chapter.attribution]}</p>}
         {isCurrent && !failed && <p className="chapter-row__now">{isPlaying ? 'Now playing' : 'Paused'}</p>}
       </div>
 

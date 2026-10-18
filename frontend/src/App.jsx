@@ -7,6 +7,12 @@ import NotFoundPage from './pages/NotFoundPage.jsx'
 import UploadPage from './pages/UploadPage.jsx'
 
 const SAMPLE = sampleSource()
+// Character voices (SPEC §15.8): Alice ch. 7 in characters mode; one chapter, so no separate full.mp3.
+const CHARACTERS_SAMPLE = sampleSource(undefined, {
+  folder: 'sample/characters',
+  id: 'sample-characters',
+  fullFile: 'ch_007.mp3',
+})
 
 function JobRoute() {
   const { jobId } = useParams()
@@ -34,6 +40,7 @@ export default function App() {
           <Route path="/" element={<UploadPage />} />
           <Route path="/book/:jobId" element={<JobRoute />} />
           <Route path="/sample" element={<BookPage key="sample" source={SAMPLE} />} />
+          <Route path="/sample/characters" element={<BookPage key="sample-characters" source={CHARACTERS_SAMPLE} />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>

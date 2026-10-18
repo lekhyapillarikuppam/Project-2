@@ -19,6 +19,8 @@ from typing import Any
 
 import httpx
 
+from app.config import Settings
+
 logger = logging.getLogger(__name__)
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
@@ -28,7 +30,8 @@ MAX_WAIT_SECONDS = 120.0
 BUDGET_WINDOW_SECONDS = 60.0
 SECONDS_PER_DAY = 86_400
 CHARS_PER_TOKEN = 4  # request size estimate: prompt chars / 4 + expected output
-EXPECTED_OUTPUT_TOKENS_BASE = 60
+# Completion estimate before a request (D42): 12 tokens per quote id + 40; corrected from `usage`.
+EXPECTED_OUTPUT_TOKENS_BASE = 40
 EXPECTED_OUTPUT_TOKENS_PER_QUOTE = 12
 
 # Reasoning settings per model family (verified with real requests, Phase 6.2 report):
@@ -70,15 +73,17 @@ def parse_reset(value: str | None) -> float | None:
 
 @dataclass
 class TokenLimiter:
-    """Rolling 60 s token budget plus a daily request cap; also obeys the server's rate-limit
-    headers and `retry-after`. `clock` and `sleep` are injectable for tests."""
+    """Two rolling 60 s budgets, all tokens and completion tokens (D42; 0 disables the second),
+    plus a daily request cap; also obeys the server's rate-limit headers and `retry-after`.
+    `clock` and `sleep` are injectable for tests."""
 
     tokens_per_minute: int
     max_requests_per_day: int
+    output_tokens_per_minute: int = 0
     clock: Callable[[], float] = time.time
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
     max_wait: float = MAX_WAIT_SECONDS
-    _spent: deque[list[float]] = field(default_factory=deque)  # [time, tokens]
+    _spent: deque[list[float]] = field(default_factory=deque)  # [time, tokens, completion tokens]
     _blocked_until: float = 0.0
     _day: int = -1
     _requests_today: int = 0
@@ -91,21 +96,24 @@ class TokenLimiter:
         if day != self._day:
             self._day, self._requests_today = day, 0
 
-    def _budget_wait(self, now: float, tokens: int) -> float:
-        """Seconds until `tokens` fit in the rolling budget (a request bigger than the whole
-        budget may go once nothing else is in the window)."""
-        used = sum(t for _, t in self._spent)
-        if used + tokens <= self.tokens_per_minute or not self._spent:
+    def _budget_wait(self, now: float, tokens: int, column: int, budget: int) -> float:
+        """Seconds until `tokens` fit in one rolling budget (`column` of the spent entries); a
+        request bigger than the whole budget may go once nothing else is in the window."""
+        if budget <= 0 or not self._spent:
             return 0.0
-        for when, spent in self._spent:
-            used -= spent
-            if used + tokens <= self.tokens_per_minute or used <= 0:
-                return when + BUDGET_WINDOW_SECONDS - now
+        used = sum(entry[column] for entry in self._spent)
+        if used + tokens <= budget:
+            return 0.0
+        for entry in self._spent:
+            used -= entry[column]
+            if used + tokens <= budget or used <= 0:
+                return entry[0] + BUDGET_WINDOW_SECONDS - now
         return self._spent[-1][0] + BUDGET_WINDOW_SECONDS - now
 
-    async def acquire(self, tokens: int) -> None:
-        """Wait for budget for a request of about `tokens`, then reserve it.
-        Raises LLMUnavailable on the daily cap or when the wait would exceed `max_wait`."""
+    async def acquire(self, tokens: int, output_tokens: int = 0) -> None:
+        """Wait for budget for a request of about `tokens` in total, `output_tokens` of them
+        completion, then reserve it. Raises LLMUnavailable on the daily cap or when the wait
+        would exceed `max_wait`."""
         waited = 0.0
         while True:
             now = self.clock()
@@ -114,9 +122,14 @@ class TokenLimiter:
                 raise LLMUnavailable(f"daily request cap ({self.max_requests_per_day}) reached")
             if now < self._server_day_exhausted_until:
                 raise LLMUnavailable("the server's daily request limit is used up")
-            wait = max(self._blocked_until - now, self._budget_wait(now, tokens), 0.0)
+            wait = max(
+                self._blocked_until - now,
+                self._budget_wait(now, tokens, 1, self.tokens_per_minute),
+                self._budget_wait(now, output_tokens, 2, self.output_tokens_per_minute),
+                0.0,
+            )
             if wait <= 0:
-                self._spent.append([now, float(tokens)])
+                self._spent.append([now, float(tokens), float(output_tokens)])
                 self._requests_today += 1
                 return
             if waited + wait > self.max_wait:
@@ -124,10 +137,12 @@ class TokenLimiter:
             await self.sleep(wait)
             waited += wait
 
-    def record(self, tokens: int) -> None:
-        """Replace the estimate of the last reserved request with its real token count."""
+    def record(self, tokens: int, output_tokens: int | None = None) -> None:
+        """Replace the estimates of the last reserved request with its real token counts."""
         if self._spent:
             self._spent[-1][1] = float(tokens)
+            if output_tokens is not None:
+                self._spent[-1][2] = float(output_tokens)
 
     def block_for(self, seconds: float) -> None:
         self._blocked_until = max(self._blocked_until, self.clock() + seconds)
@@ -145,6 +160,14 @@ class TokenLimiter:
         if headers.get("x-ratelimit-remaining-requests", "").strip() == "0":
             reset = parse_reset(headers.get("x-ratelimit-reset-requests")) or SECONDS_PER_DAY
             self._server_day_exhausted_until = self.clock() + reset
+
+
+def limiter_from_settings(settings: Settings) -> TokenLimiter:
+    return TokenLimiter(
+        settings.llm_tokens_per_minute,
+        settings.llm_max_requests_per_day,
+        output_tokens_per_minute=settings.llm_output_tokens_per_minute,
+    )
 
 
 @dataclass(frozen=True)
@@ -213,10 +236,12 @@ class GroqClient:
             (self.cache_dir / f"{key}.json").write_text(json.dumps(entry, ensure_ascii=False), encoding="utf-8")
 
     @staticmethod
-    def estimate_tokens(system: str, user: str, quotes: int) -> int:
-        return (len(system) + len(user)) // CHARS_PER_TOKEN + EXPECTED_OUTPUT_TOKENS_BASE + (
-            EXPECTED_OUTPUT_TOKENS_PER_QUOTE * quotes
-        )
+    def estimate_output_tokens(quotes: int) -> int:
+        return EXPECTED_OUTPUT_TOKENS_BASE + EXPECTED_OUTPUT_TOKENS_PER_QUOTE * quotes
+
+    @classmethod
+    def estimate_tokens(cls, system: str, user: str, quotes: int) -> int:
+        return (len(system) + len(user)) // CHARS_PER_TOKEN + cls.estimate_output_tokens(quotes)
 
     async def complete(self, system: str, user: str, quotes: int = 0) -> str:
         """The response content (a JSON string) for one request. Raises LLMError."""
@@ -229,11 +254,12 @@ class GroqClient:
             return str(cached["content"])
 
         estimate = self.estimate_tokens(system, user, quotes)
+        output_estimate = self.estimate_output_tokens(quotes)
         async with httpx.AsyncClient(
             base_url=self.base_url, transport=self.transport, timeout=REQUEST_TIMEOUT_SECONDS
         ) as http:
             while True:
-                await self.limiter.acquire(estimate)
+                await self.limiter.acquire(estimate, output_estimate)
                 started = self.timer()
                 try:
                     response = await http.post(
@@ -246,7 +272,7 @@ class GroqClient:
                 if response.status_code == 429:
                     retry_after = parse_reset(response.headers.get("retry-after")) or BUDGET_WINDOW_SECONDS
                     logger.warning("Groq 429; retrying after %.1f s", retry_after)
-                    self.limiter.record(0)
+                    self.limiter.record(0, 0)
                     self.limiter.block_for(retry_after)
                     continue  # acquire() raises LLMUnavailable once the wait gets too long
                 if response.status_code != 200:
@@ -259,10 +285,17 @@ class GroqClient:
                     raise LLMError(f"unexpected response: {e!r}") from e
                 prompt_tokens = int(usage.get("prompt_tokens", 0))
                 completion_tokens = int(usage.get("completion_tokens", 0))
-                self.limiter.record(prompt_tokens + completion_tokens or estimate)
+                self.limiter.record(prompt_tokens + completion_tokens or estimate, completion_tokens or output_estimate)
                 self.usage.append(UsageRecord(self.model, prompt_tokens, completion_tokens, latency, False))
                 self._store(key, {
                     "model": self.model, "content": content,
                     "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens, "latency": latency},
                 })  # fmt: skip
                 return str(content)
+
+
+def client_from_settings(settings: Settings, cache_dir: Path | None = None) -> GroqClient | None:
+    """The configured Groq client, or None when the method is `baseline` or no key is set."""
+    if settings.attribution_method == "baseline" or not settings.groq_api_key:
+        return None
+    return GroqClient(settings.groq_api_key, settings.llm_model, limiter_from_settings(settings), cache_dir=cache_dir)

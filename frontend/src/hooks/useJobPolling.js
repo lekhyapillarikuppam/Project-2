@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { isAbort } from '../api/client.js'
 
-export const ACTIVE_STATUSES = new Set(['queued', 'extracting', 'synthesizing'])
+export const ACTIVE_STATUSES = new Set(['queued', 'extracting', 'attributing', 'synthesizing'])
 export const POLL_INTERVAL_MS = 3000
 // After a request has given up (2 min of retries), keep trying quietly at this pace.
 export const LOST_RETRY_MS = 30000
 
 /**
- * Loads the job from `source` and polls it every 3 s while it is queued/extracting/synthesizing
+ * Loads the job from `source` and polls it every 3 s while it is queued/extracting/attributing/synthesizing
  * (SPEC §11). Dropped connections are retried by the client (1/2/4/8 s for up to 2 min).
  *
  * connection: 'ok' | 'retrying' (a request is being retried) | 'lost' (gave up; still retried slowly).

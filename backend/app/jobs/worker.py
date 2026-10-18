@@ -11,16 +11,26 @@ import time
 from collections.abc import Callable
 
 from app.config import Settings
+from app.dialogue.attribute import ChapterAttribution, CharacterBook, apply_speakers, chapter_texts
+from app.dialogue.llm import GroqClient, client_from_settings
+from app.dialogue.segment import segment_chapter
+from app.dialogue.voices import new_casting
 from app.jobs.memory import memory_summary
 from app.jobs.models import ChapterState, Job, error_body, utc_now
 from app.jobs.registry import JobRegistry
+from app.models import DocumentModel
 from app.pipeline import PipelineError, run_pipeline
 from app.tts.engines import TTSEngine
-from app.tts.narrator import ProgressEvent, combine_engines, narrate_document, plan_narration
+from app.tts.narrator import ChapterPlan, ProgressEvent, combine_engines, narrate_document, plan_chapter, plan_narration
 
 logger = logging.getLogger(__name__)
 
 EngineFactory = Callable[[Settings], TTSEngine]
+LLMFactory = Callable[[Settings], GroqClient | None]
+BASELINE_WARNING = (
+    "Speaker detection used the simpler rule-based method for {n} chapter{s} "
+    "(the AI service was unavailable or busy)."
+)
 
 
 def final_status(chapters: list[ChapterState]) -> str:
@@ -40,10 +50,17 @@ def estimate_eta(chars_done: int, chars_total: int, elapsed: float) -> int | Non
 
 
 class JobWorker:
-    def __init__(self, registry: JobRegistry, settings: Settings, engine_factory: EngineFactory) -> None:
+    def __init__(
+        self,
+        registry: JobRegistry,
+        settings: Settings,
+        engine_factory: EngineFactory,
+        llm_factory: LLMFactory = client_from_settings,
+    ) -> None:
         self.registry = registry
         self.settings = settings
         self.engine_factory = engine_factory
+        self.llm_factory = llm_factory
         self._queue: queue.Queue[str | None] = queue.Queue()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -140,7 +157,8 @@ class JobWorker:
             j.warnings = list(document.warnings)
             j.chapters = [ChapterState(p.index, p.title) for p in plan]
             j.chars_total = sum(p.chars for p in plan)
-            j.status = "synthesizing"
+            # characters mode: `attributing` until chapter 1 has its speakers (CharactersMode)
+            j.status = "attributing" if j.narration_mode == "characters" else "synthesizing"
             j.synthesis_started = time.monotonic()
 
         self.registry.update(job_id, start_synthesis)
@@ -171,7 +189,13 @@ class JobWorker:
             self.registry.update(job_id, change)
 
         engine = self.engine_factory(settings)
-        result = await narrate_document(document, job.folder, engine, settings, on_progress, plan)
+        if job.narration_mode == "characters":
+            async with CharactersMode(self, job_id, document) as characters:
+                result = await narrate_document(
+                    document, job.folder, engine, settings, on_progress, plan, characters.prepare
+                )
+        else:
+            result = await narrate_document(document, job.folder, engine, settings, on_progress, plan)
 
         def finish(j: Job) -> None:
             j.status = final_status(j.chapters)
@@ -191,3 +215,85 @@ class JobWorker:
             result.chars_per_second,
             result.engine_used,
         )
+
+
+class CharactersMode:
+    """Characters mode for one job (SPEC §15.1, D34, D37, D41): the baseline book pass reserves
+    voices; chapter N+1 is attributed as a task while chapter N is narrated (same event loop); each
+    chapter is cast and chunked just before narration (`prepare`). An LLM failure only makes
+    windows fall back to the baseline; leaving the block cancels a pending attribution task."""
+
+    def __init__(self, worker: JobWorker, job_id: str, document: DocumentModel) -> None:
+        settings = worker.settings
+        self.registry = worker.registry
+        self.job_id = job_id
+        self.settings = settings
+        self.chapters = document.chapters
+        self.texts = [chapter_texts(c) for c in document.chapters]
+        self.client = worker.llm_factory(settings)
+        self.casting = new_casting(settings.edge_voice, settings.max_cast)
+        self.book = CharacterBook.for_document(
+            document, settings.attribution_method, self.client, settings.llm_window_words, self.casting
+        )
+        self.next: asyncio.Task[ChapterAttribution] | None = None
+        self.next_position = -1
+
+    async def __aenter__(self) -> "CharactersMode":
+        total = sum(self.book.windows(t) for t in self.texts)
+        self.registry.update(self.job_id, lambda j: setattr(j, "windows_total", total))
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        if self.next is not None and not self.next.done():
+            self.next.cancel()
+            await asyncio.gather(self.next, return_exceptions=True)
+
+    def _window_done(self) -> None:
+        def change(j: Job) -> None:
+            j.windows_done += 1
+
+        self.registry.update(self.job_id, change, persist=False)
+
+    def _start(self, position: int) -> None:
+        self.next_position = position
+        self.next = asyncio.create_task(self.book.attribute(self.texts[position], self._window_done))
+
+    async def prepare(self, position: int) -> ChapterPlan:
+        """Speakers and voices for the chapter at `position`, then its chunks; starts the next
+        chapter's attribution."""
+        if self.next is None or self.next_position != position:
+            self._start(position)
+        assert self.next is not None
+        attribution = await self.next
+        self.next = None
+        speakers, voices = self.book.cast_chapter(attribution)  # lazy casting, just before narration
+        if position + 1 < len(self.chapters):
+            self._start(position + 1)  # one chapter ahead, while this one is narrated
+        chapter = self.chapters[position]
+        segmented, _ = segment_chapter(chapter, self.book.family)
+        plan = plan_chapter(apply_speakers(segmented, speakers), self.settings.tts_chunk_max_chars, voices)
+        used = "baseline" if self.client is None else attribution.method_used
+        cast = [
+            {
+                "name": m.name, "aliases": list(m.aliases), "gender": m.gender, "lines": m.lines,
+                "voice": voice.id, "voice_label": voice.label,
+            }
+            for m in self.book.cast.members
+            if (voice := self.casting.assigned_voice(m)) is not None
+        ]  # fmt: skip
+
+        def change(j: Job) -> None:
+            state = j.chapter(chapter.index)
+            if state is not None:
+                state.attribution = used
+            j.cast = cast
+            fallbacks = sum(1 for c in j.chapters if c.attribution in ("baseline", "mixed"))
+            j.warnings = [w for w in j.warnings if not w.startswith("Speaker detection used")]
+            if fallbacks:
+                j.warnings.append(BASELINE_WARNING.format(n=fallbacks, s="" if fallbacks == 1 else "s"))
+            if j.status == "attributing":
+                j.status = "synthesizing"
+
+        self.registry.update(self.job_id, change)
+        logger.info("Job %s: chapter %d attributed (%s), cast of %d", self.job_id, chapter.index, used, len(cast))
+        return plan

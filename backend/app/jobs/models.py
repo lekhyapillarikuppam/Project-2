@@ -7,10 +7,12 @@ from typing import Literal
 
 from app.pipeline.errors import ERROR_MESSAGES
 
-JobStatus = Literal["queued", "extracting", "synthesizing", "done", "partial", "failed", "expired"]
+JobStatus = Literal["queued", "extracting", "attributing", "synthesizing", "done", "partial", "failed", "expired"]
 ChapterStatus = Literal["pending", "generating", "ready", "failed"]
+NarrationMode = Literal["single", "characters"]
+AttributionUsed = Literal["llm", "baseline", "mixed", "none"]
 
-ACTIVE_STATUSES: frozenset[str] = frozenset({"extracting", "synthesizing"})
+ACTIVE_STATUSES: frozenset[str] = frozenset({"extracting", "attributing", "synthesizing"})
 FINISHED_STATUSES: frozenset[str] = frozenset({"done", "partial", "failed"})
 
 
@@ -33,6 +35,7 @@ class ChapterState:
     status: ChapterStatus = "pending"
     duration_seconds: float | None = None
     error: dict[str, str] | None = None  # {"code": "TTS_FAILED", ...} when failed
+    attribution: AttributionUsed = "none"  # characters mode: which method gave the speakers (§15.1)
     path: Path | None = None  # internal: the chapter MP3 once ready
 
     def to_public(self) -> dict:
@@ -42,6 +45,7 @@ class ChapterState:
             "status": self.status,
             "duration_seconds": round(self.duration_seconds, 2) if self.duration_seconds is not None else None,
             "error": self.error,
+            "attribution": self.attribution,
         }
 
 
@@ -61,6 +65,10 @@ class Job:
     chars_done: int = 0
     eta_seconds: int | None = None
     engine_used: str | None = None
+    narration_mode: NarrationMode = "single"
+    windows_total: int = 0  # characters mode: attribution windows (LLM requests)
+    windows_done: int = 0
+    cast: list[dict] = field(default_factory=list)  # §15.1: name, aliases, gender, lines, voice, voice_label
     # internal
     synthesis_started: float | None = None  # time.monotonic() when narration began
     finished_at: datetime | None = None
@@ -94,7 +102,11 @@ class Job:
                 "chars_total": self.chars_total,
                 "chars_done": self.chars_done,
                 "eta_seconds": self.eta_seconds,
+                "windows_total": self.windows_total,
+                "windows_done": self.windows_done,
             },
             "chapters": [c.to_public() for c in self.chapters],
             "engine_used": self.engine_used,
+            "narration_mode": self.narration_mode,
+            "cast": [dict(c) for c in self.cast],
         }

@@ -1,16 +1,16 @@
-"""Voice casting (SPEC §15.5)."""
+"""Voice casting (SPEC §15.5, D41): reservations from the book pass, lazy casting per chapter."""
 
 import json
 from pathlib import Path
 
 from app.dialogue.cast import CastMember, NameReport
-from app.dialogue.voices import cast_with_voices, load_voice_pool, new_casting
+from app.dialogue.voices import cast_for_chapter, load_voice_pool, new_casting
 
 NARRATOR = "en-US-AriaNeural"
 
 
-def member(name: str, gender: str, lines: int = 1) -> CastMember:
-    return CastMember(name, gender, lines)
+def member(name: str, gender: str) -> CastMember:
+    return CastMember(name, gender, 0)
 
 
 def small_pool(tmp_path: Path, female: int, male: int) -> Path:
@@ -29,51 +29,75 @@ def test_pool_excludes_the_narrator_and_is_split_by_gender() -> None:
     assert {v.gender for v in pool.female} == {"female"} and {v.gender for v in pool.male} == {"male"}
 
 
-def test_ranked_characters_get_distinct_voices_by_gender() -> None:
+def test_reservations_need_a_capitalised_name_and_three_explicit_lines() -> None:
     casting = new_casting(NARRATOR, 8)
-    alice, hatter, hare = member("Alice", "female"), member("Hatter", "male"), member("Hare", "male")
-    casting.assign([alice, hatter, hare])
-    voices = [casting.voice_for(m) for m in (alice, hatter, hare)]
-    assert len(set(voices)) == 3
-    assert voices[0].gender == "female" and voices[1].gender == voices[2].gender == "male"
+    casting.reserve([NameReport("Alice", 9), NameReport("the girl", 12), NameReport("Hatter", 3),
+                     NameReport("Dodo", 2)])  # fmt: skip
+    assert casting.is_reserved(member("Alice", "female")) and casting.is_reserved(member("the Hatter", "male"))
+    assert not casting.is_reserved(member("the girl", "female"))  # an epithet never takes a slot
+    assert not casting.is_reserved(member("Dodo", "male"))
+
+
+def test_reservations_are_capped_at_max_cast_minus_two() -> None:
+    casting = new_casting(NARRATOR, 4)
+    casting.reserve([NameReport(n, 10 - i) for i, n in enumerate(["Ann", "Bob", "Cy", "Di", "Ed"])])
+    assert len(casting.reserved) == 2
+
+
+def test_a_reserved_character_gets_the_llm_gender() -> None:
+    casting = new_casting(NARRATOR, 8)
+    casting.reserve([NameReport("March Hare", 5)])  # the baseline couldn't tell its gender
+    casting.cast_chapter([(member("March Hare", "male"), 1)])  # the LLM says male
+    voice = casting.voice_for(member("March Hare", "male"))
+    assert voice.gender == "male" and voice != casting.minor["male"]
+
+
+def test_an_epithet_with_many_lines_cannot_take_a_reserved_slot(tmp_path: Path) -> None:
+    casting = new_casting(NARRATOR, 4, small_pool(tmp_path, female=4, male=4))
+    casting.reserve([NameReport("Ann", 5), NameReport("Bob", 5), NameReport("the girl", 30)])
+    casting.cast_chapter([(member("the girl", "female"), 30), (member("Cy", "male"), 3)])
+    # 4 slots, 2 held for Ann and Bob: the girl and Cy take the other two
+    assert casting.voice_for(member("the girl", "female")).id == "f0"
+    assert casting.voice_for(member("Cy", "male")).id == "m0"
+    casting.cast_chapter([(member("Dan", "male"), 5)])  # no slots left (Ann, Bob still held)
+    assert casting.voice_for(member("Dan", "male")) == casting.minor["male"]
+    casting.cast_chapter([(member("Ann", "female"), 1), (member("Bob", "male"), 1)])
+    assert casting.voice_for(member("Ann", "female")).id == "f1"
+    assert casting.voice_for(member("Bob", "male")).id == "m1"
+
+
+def test_a_late_major_character_gets_a_distinct_voice_when_slots_remain() -> None:
+    casting = new_casting(NARRATOR, 8)
+    casting.reserve([NameReport("Alice", 20)])
+    casting.cast_chapter([(member("Alice", "female"), 10)])
+    casting.cast_chapter([(member("Queen", "female"), 6)])  # first appears in a later chapter
+    queen = casting.voice_for(member("Queen", "female"))
+    assert queen not in (casting.voice_for(member("Alice", "female")), casting.minor["female"])
+
+
+def test_one_line_characters_get_the_minor_voice() -> None:
+    casting = new_casting(NARRATOR, 8)
+    casting.cast_chapter([(member("Eaglet", "male"), 1), (member("Lory", "female"), 1), (member("Duck", "unknown"), 1)])
+    assert casting.voice_for(member("Eaglet", "male")) == casting.minor["male"]
+    assert casting.voice_for(member("Lory", "female")) == casting.minor["female"]
+    assert casting.voice_for(member("Duck", "unknown")) == casting.minor_voice("unknown")
     assert casting.voice_for(None) == casting.narrator
 
 
-def test_unknown_gender_uses_the_pool_with_more_unused_voices(tmp_path: Path) -> None:
-    casting = new_casting(NARRATOR, 8, small_pool(tmp_path, female=3, male=5))
-    casting.assign([member("A", "unknown")])
-    assert casting.voice_for(member("A", "unknown")).gender == "male"
-
-
-def test_cap_and_pool_running_out_lead_to_minor_voices(tmp_path: Path) -> None:
-    casting = new_casting(NARRATOR, 3, small_pool(tmp_path, female=3, male=3))
-    women = [member(f"W{i}", "female") for i in range(4)]
-    men = [member(f"M{i}", "male") for i in range(2)]
-    casting.assign(women + men)
-    voices = {m.name: casting.voice_for(m).id for m in women + men}
-    # pool f0, f1 (f2 is the minor female voice); the cap of 3 distinct voices is reached by W0, W1, M?
-    assert voices["W0"] == "f0" and voices["W1"] == "f1"
-    assert voices["W2"] == voices["W3"] == "f2"  # female pool used up: minor
-    assert voices["M0"] == "m0" and voices["M1"] == "m2"  # cap reached: minor male
-
-
-def test_voices_never_change_and_new_characters_get_the_next_free_one() -> None:
+def test_voices_never_change_once_assigned() -> None:
     casting = new_casting(NARRATOR, 8)
-    alice = member("Alice", "female")
-    casting.assign([alice])
-    first = casting.voice_for(alice)
-    casting.assign([member("Queen", "female"), alice])
-    assert casting.voice_for(alice) == first
-    assert casting.voice_for(member("Queen", "female")) not in (first, casting.minor["female"])
+    casting.cast_chapter([(member("Dodo", "male"), 1)])  # minor voice in chapter 1
+    first = casting.voice_for(member("Dodo", "male"))
+    casting.cast_chapter([(member("Dodo", "male"), 9)])  # a big part later: still the same voice
+    assert casting.voice_for(member("Dodo", "male")) == first
 
 
 def test_assignment_is_deterministic() -> None:
-    reports = [NameReport("Alice", 9), NameReport("Hatter", 5), NameReport("Dormouse", 2)]
-    genders = {"alice": "female", "hatter": "male", "dormouse": "male"}
-    runs = []
-    for _ in range(2):
+    def run() -> list[tuple[str, str]]:
         casting = new_casting(NARRATOR, 8)
-        cast = cast_with_voices(casting, reports, genders, [NameReport("Queen", 1, "female")])
-        runs.append([(m.name, casting.voice_for(m).id) for m in cast.members])
-    assert runs[0] == runs[1]
-    assert [name for name, _ in runs[0]] == ["Alice", "Hatter", "Dormouse", "Queen"]
+        casting.reserve([NameReport("Alice", 9), NameReport("Hatter", 5)])
+        found = [NameReport("Alice", 4, "female"), NameReport("Hatter", 3, "male"), NameReport("Dormouse", 2, "male")]
+        cast = cast_for_chapter(casting, found, {}, set(), ["Dormouse", "Alice", "Hatter", "Dormouse", "Alice"])
+        return [(m.name, casting.voice_for(m).id) for m in cast.members]
+
+    assert run() == run()

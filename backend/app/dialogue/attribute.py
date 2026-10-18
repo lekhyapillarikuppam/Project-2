@@ -13,10 +13,11 @@ import json
 import logging
 import re
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
-from app.dialogue.cast import PRONOUN_WINDOW_CHARS, NameReport, gender_from_pronouns, normalize_name
+from app.dialogue.cast import PRONOUN_WINDOW_CHARS, Cast, NameReport, gender_from_pronouns, normalize_name
 from app.dialogue.llm import GroqClient, LLMError
 from app.dialogue.segment import (
     SPEECH_VERBS,
@@ -26,6 +27,7 @@ from app.dialogue.segment import (
     find_quote_spans,
     paragraph_text,
 )
+from app.dialogue.voices import VoiceCasting, cast_for_chapter
 from app.dialogue.windows import Utterance, build_windows, collect_utterances, render_window
 from app.models import Chapter, DocumentModel
 
@@ -367,9 +369,11 @@ async def llm_attribute(
     roster: Roster,
     baseline: BaselineResult,
     window_words: int,
+    on_window: Callable[[], None] | None = None,
 ) -> ChapterAttribution:
-    """One request per window; a window whose request or reply fails twice uses the baseline (D34).
-    New characters are added to `roster`, and their lines counted."""
+    """One request per window; a window whose request or reply fails twice (or fails in any other
+    way) uses the baseline (D34). New characters are added to `roster`, and their lines counted.
+    `on_window` is called after each window (progress)."""
     utterances = collect_utterances(spans)
     windows = build_windows(paragraphs, utterances, window_words)
     result: dict[str, Attribution] = {}
@@ -382,8 +386,15 @@ async def llm_attribute(
             speakers, new = await _ask(client, text, roster, ids)
         except (LLMError, ResponseError) as e:
             logger.warning("Window %d: using the baseline (%s)", window.index, e)
+            speakers = None
+        except Exception:  # noqa: BLE001 - the LLM must never fail the job (D34)
+            logger.exception("Window %d: unexpected error; using the baseline", window.index)
+            speakers = None
+        if speakers is None:
             for uid in window.utterance_ids:
                 result[uid] = baseline.attributions[uid]
+            if on_window is not None:
+                on_window()
             continue
         answered += 1
         for n in new:
@@ -402,6 +413,8 @@ async def llm_attribute(
             entry = roster.find(speaker) or roster.add(speaker)
             entry.lines += 1
             result[uid] = Attribution(uid, entry.name, "llm", "llm")
+        if on_window is not None:
+            on_window()
     ordered = {u.id: result.get(u.id, baseline.attributions[u.id]) for u in utterances}
     return ChapterAttribution(ordered, len(windows), answered)
 
@@ -426,12 +439,13 @@ async def attribute_chapter(
     client: GroqClient | None,
     roster: Roster,
     window_words: int,
+    on_window: Callable[[], None] | None = None,
 ) -> tuple[ChapterAttribution, BaselineResult]:
     """Attribute one chapter with `method` (the baseline is always computed: fallback and override)."""
     baseline = baseline_attribute(paragraphs, spans)
     if method == "baseline" or client is None:
         return combine("baseline", baseline, None), baseline
-    llm = await llm_attribute(paragraphs, spans, client, roster, baseline, window_words)
+    llm = await llm_attribute(paragraphs, spans, client, roster, baseline, window_words, on_window)
     return combine(method, baseline, llm), baseline
 
 
@@ -443,8 +457,9 @@ def chapter_texts(chapter: Chapter) -> list[str]:
 
 
 def rank_characters(document: DocumentModel) -> tuple[list[NameReport], dict[str, str]]:
-    """The fast whole-book pass (SPEC §15.5): baseline line counts per character, no LLM.
-    Returns the name reports (most lines first) and the pronoun genders by normalised name."""
+    """The fast whole-book pass (SPEC §15.5, D41): explicitly tagged lines per character from the
+    baseline, no LLM; used to reserve voices. Returns the name reports (most lines first) and the
+    pronoun genders by normalised name."""
     return rank_texts([chapter_texts(c) for c in document.chapters], detect_quote_family(document))
 
 
@@ -455,8 +470,9 @@ def rank_texts(chapters: list[list[str]], family: QuoteFamily | None) -> tuple[l
     for texts in chapters:
         spans, _ = find_quote_spans(texts, family)
         result = baseline_attribute(texts, spans)
-        for r in result.reports():
-            counts[r.name] += r.lines
+        for a in result.attributions.values():
+            if a.reason == "explicit":
+                counts[a.speaker] += 1
         for name, g in result.genders.items():
             genders.setdefault(name, []).append(g)
     ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0].casefold()))
@@ -467,6 +483,76 @@ def rank_texts(chapters: list[list[str]], family: QuoteFamily | None) -> tuple[l
         return top[0][0] if top and (len(top) == 1 or top[0][1] > top[1][1]) else "unknown"
 
     return [NameReport(name, lines) for name, lines in ranked], {n: vote(gs) for n, gs in genders.items()}
+
+
+class CharacterBook:
+    """Characters mode for one book (SPEC §15.3–15.5, D37, D41): the baseline book pass reserves
+    voices; each chapter is then attributed (`attribute`) and cast (`cast_chapter`) lazily, just
+    before it is narrated. One instance per job; not thread-safe (one event loop)."""
+
+    def __init__(
+        self,
+        chapters: list[list[str]],
+        family: QuoteFamily | None,
+        method: Method,
+        client: GroqClient | None,
+        window_words: int,
+        casting: VoiceCasting,
+    ) -> None:
+        self.family = family
+        self.method = method
+        self.client = client
+        self.window_words = window_words
+        self.casting = casting
+        ranking, self.genders = rank_texts(chapters, family)
+        casting.reserve(ranking)
+        self.roster = Roster()
+        self.baseline_lines: Counter[str] = Counter()  # names the baseline gave (fallback windows)
+        self.cast: Cast = Cast([])
+
+    @classmethod
+    def for_document(
+        cls, document: DocumentModel, method: Method, client: GroqClient | None, window_words: int,
+        casting: VoiceCasting,
+    ) -> "CharacterBook":  # fmt: skip
+        return cls([chapter_texts(c) for c in document.chapters], detect_quote_family(document), method, client,
+                   window_words, casting)  # fmt: skip
+
+    def spans(self, texts: list[str]) -> list[list[QuoteSpan]]:
+        return find_quote_spans(texts, self.family)[0]
+
+    def windows(self, texts: list[str]) -> int:
+        """LLM windows (requests) this chapter needs; 0 for the baseline method."""
+        if self.method == "baseline" or self.client is None:
+            return 0
+        return len(build_windows(texts, collect_utterances(self.spans(texts)), self.window_words))
+
+    async def attribute(self, texts: list[str], on_window: Callable[[], None] | None = None) -> ChapterAttribution:
+        attribution, _ = await attribute_chapter(
+            texts, self.spans(texts), self.method, self.client, self.roster, self.window_words, on_window
+        )
+        return attribution
+
+    def cast_chapter(self, attribution: ChapterAttribution) -> tuple[dict[str, str], dict[str, str]]:
+        """Voices for this chapter's speakers (D41). Returns utterance id -> cast name (UNKNOWN
+        left out) and cast name -> voice id; `self.cast` becomes the book's cast so far."""
+        for a in attribution.attributions.values():
+            if a.method == "baseline" and a.speaker != UNKNOWN:
+                self.baseline_lines[a.speaker] += 1
+        found = self.roster.reports() + [NameReport(n, lines) for n, lines in self.baseline_lines.items()]
+        speakers = [a.speaker for a in attribution.attributions.values() if a.speaker != UNKNOWN]
+        self.cast = cast_for_chapter(self.casting, found, self.genders, self.roster.distinct, speakers)
+        by_utterance: dict[str, str] = {}
+        voices: dict[str, str] = {}
+        for uid, a in attribution.attributions.items():
+            member = self.cast.resolve(a.speaker) if a.speaker != UNKNOWN else None
+            if member is None:
+                continue
+            voice = self.casting.voice_for(member)
+            if voice != self.casting.narrator:
+                by_utterance[uid] = member.name
+                voices[member.name] = voice.id
+        return by_utterance, voices
 
 
 def apply_speakers(chapter: Chapter, speakers: dict[str, str]) -> Chapter:

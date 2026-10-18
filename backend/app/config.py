@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     attribution_method: Literal["baseline", "llm", "llm_with_baseline_override"] = "llm"  # D40
     llm_window_words: int = 1200
     llm_tokens_per_minute: int = 7000  # rolling 60 s budget, below Groq's 8,000 (D37)
+    llm_output_tokens_per_minute: int = 1000  # rolling 60 s completion budget (D42); 0 disables
     llm_max_requests_per_day: int = 800
     llm_cache_dir: Path = Path("storage/llm_cache")  # evaluation only: responses cached on disk
     max_cast: int = 8

@@ -32,6 +32,9 @@ UPLOAD_PIECE_BYTES = 1024 * 1024  # the body is written to disk in 1 MB pieces (
 # file of exactly the maximum size is not rejected. The streamed byte count is exact.
 MULTIPART_OVERHEAD_BYTES = 64 * 1024
 _SAFE_SUFFIX = re.compile(r"\.[a-z0-9]{1,10}")
+FIELD_MAX_BYTES = 100  # small form fields (narration_mode); longer values are cut
+NARRATION_MODES = ("single", "characters")
+CHARACTERS_UNAVAILABLE_MESSAGE = "Character voices aren't available on this server. Choose single narrator."
 
 
 def _settings(request: Request) -> Settings:
@@ -50,7 +53,8 @@ class _TooLarge(Exception):
 
 
 class _UploadSink:
-    """python-multipart callbacks: writes the `file` part straight to disk, counting bytes."""
+    """python-multipart callbacks: writes the `file` part straight to disk, counting bytes; other
+    parts are small form fields kept in `fields` (at most FIELD_MAX_BYTES each)."""
 
     def __init__(self, folder: Path, max_bytes: int) -> None:
         self.folder = folder
@@ -63,6 +67,9 @@ class _UploadSink:
         self._value = b""
         self._file = None
         self._done = False
+        self.fields: dict[str, str] = {}
+        self._field_name: str | None = None
+        self._field_value = b""
 
     def callbacks(self) -> dict:
         return {
@@ -95,9 +102,13 @@ class _UploadSink:
             raw = filename.decode("utf-8", errors="replace").replace("\\", "/")
             self.filename = raw.rsplit("/", 1)[-1].strip()
             self._file = self.path.open("wb", buffering=UPLOAD_PIECE_BYTES)
+        elif name and filename is None:
+            self._field_name, self._field_value = name.decode("utf-8", errors="replace"), b""
 
     def _part_data(self, data: bytes, start: int, end: int) -> None:
         if self._file is None:
+            if self._field_name is not None and len(self._field_value) < FIELD_MAX_BYTES:
+                self._field_value += data[start:end][: FIELD_MAX_BYTES - len(self._field_value)]
             return
         self.size += end - start
         if self.size > self.max_bytes:
@@ -105,6 +116,9 @@ class _UploadSink:
         self._file.write(data[start:end])
 
     def _part_end(self) -> None:
+        if self._field_name is not None:
+            self.fields[self._field_name] = self._field_value.decode("utf-8", errors="replace").strip()
+            self._field_name = None
         if self._file is not None:
             self._file.close()
             self._file = None
@@ -120,8 +134,9 @@ class _UploadSink:
         return self._done and bool(self.filename)
 
 
-async def _receive_upload(request: Request, folder: Path, max_bytes: int) -> tuple[Path, str]:
-    """Stream the multipart body to `folder/input.<ext>`; return (path, original filename)."""
+async def _receive_upload(request: Request, folder: Path, max_bytes: int) -> tuple[Path, str, dict[str, str]]:
+    """Stream the multipart body to `folder/input.<ext>`; return (path, original filename, other
+    form fields)."""
     content_type, params = parse_options_header(request.headers.get("content-type", ""))
     boundary = params.get(b"boundary")
     if content_type != b"multipart/form-data" or not boundary:
@@ -141,7 +156,17 @@ async def _receive_upload(request: Request, folder: Path, max_bytes: int) -> tup
     suffix = Path(sink.filename).suffix.lower()
     target = folder / f"input{suffix if _SAFE_SUFFIX.fullmatch(suffix) else ''}"
     sink.path.replace(target)
-    return target, sink.filename
+    return target, sink.filename, sink.fields
+
+
+def _narration_mode(fields: dict[str, str], settings: Settings) -> str:
+    """SPEC §15.1: `single` (default) or `characters`, which needs a configured LLM key."""
+    mode = fields.get("narration_mode") or "single"
+    if mode not in NARRATION_MODES:
+        raise ApiError("BAD_REQUEST", "narration_mode must be 'single' or 'characters'.")
+    if mode == "characters" and not settings.groq_api_key:
+        raise ApiError("BAD_REQUEST", CHARACTERS_UNAVAILABLE_MESSAGE)
+    return mode
 
 
 @router.post("/upload", status_code=202)
@@ -167,7 +192,8 @@ async def upload(request: Request) -> dict:
     folder = settings.storage_path / "jobs" / job_id
     folder.mkdir(parents=True)
     try:
-        path, filename = await _receive_upload(request, folder, settings.max_file_bytes)
+        path, filename, fields = await _receive_upload(request, folder, settings.max_file_bytes)
+        mode = _narration_mode(fields, settings)
         try:
             validation = await run_in_threadpool(validate_file, path, filename, settings)
         except PipelineError as e:
@@ -181,6 +207,7 @@ async def upload(request: Request) -> dict:
             created_at=created,
             expires_at=created + timedelta(hours=settings.retention_hours),
             warnings=list(validation.warnings),
+            narration_mode=mode,  # type: ignore[arg-type]
         )
         try:
             registry.add(job)
@@ -191,7 +218,7 @@ async def upload(request: Request) -> dict:
         raise
 
     request.app.state.worker.submit(job_id)
-    logger.info("Job %s queued: %s", job_id, filename)
+    logger.info("Job %s queued: %s (%s)", job_id, filename, mode)
     return {"job_id": job_id, "status": "queued"}
 
 
@@ -285,4 +312,5 @@ def public_config(request: Request) -> dict:
         "accepted_types": [".pdf", ".docx"],
         "retention_hours": settings.retention_hours,
         "tts_fallback": settings.tts_fallback,
+        "character_voices_available": bool(settings.groq_api_key),
     }

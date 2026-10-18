@@ -10,7 +10,7 @@ import asyncio
 import logging
 import shutil
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -106,10 +106,10 @@ class ChapterPlan:
 def plan_narration(doc: DocumentModel, max_chars: int, voices: Mapping[str, str] | None = None) -> list[ChapterPlan]:
     """Chunk every chapter (normalized text). The worker uses it to know `chars_total` up front.
     `voices` (speaker -> voice id) is given in characters mode only (SPEC §15.6)."""
-    return [_plan_chapter(c, max_chars, voices) for c in doc.chapters]
+    return [plan_chapter(c, max_chars, voices) for c in doc.chapters]
 
 
-def _plan_chapter(chapter: Chapter, max_chars: int, voices: Mapping[str, str] | None = None) -> ChapterPlan:
+def plan_chapter(chapter: Chapter, max_chars: int, voices: Mapping[str, str] | None = None) -> ChapterPlan:
     return ChapterPlan(chapter.index, chapter.title, chunk_chapter(chapter, max_chars, voices))
 
 
@@ -286,9 +286,12 @@ async def narrate_document(
     settings: Settings,
     on_progress: Callable[[ProgressEvent], None] | None = None,
     plan: list[ChapterPlan] | None = None,
+    prepare: Callable[[int], Awaitable[ChapterPlan]] | None = None,
 ) -> NarrationResult:
     """Narrate every chapter of `doc` into `out_dir/chapters/`, strictly in order. `plan` (from
-    `plan_narration`) can be passed to avoid chunking the document twice."""
+    `plan_narration`) can be passed to avoid chunking the document twice. `prepare(position)`
+    (characters mode) returns the final plan of a chapter just before it is narrated: attribution
+    and voice casting happen there, lazily (D41); its chunks replace the planned ones."""
     start = time.perf_counter()
     if plan is None:
         plan = plan_narration(doc, settings.tts_chunk_max_chars)
@@ -303,6 +306,12 @@ async def narrate_document(
             on_progress(event)
 
     for position, (chapter_plan, chapter_result) in enumerate(zip(plan, result.chapters)):
+        if prepare is not None:
+            prepared = await prepare(position)
+            run.chars_total += prepared.chars - chapter_plan.chars
+            result.chars_total = run.chars_total
+            chapter_result.chars, chapter_result.chunks = prepared.chars, len(prepared.chunks)
+            chapter_plan = prepared
         if not chapter_plan.chunks:
             _fail_chapter(chapter_result, "chapter has no text to narrate", run, emit)
             continue

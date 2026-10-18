@@ -3,6 +3,7 @@
     python scripts\\smoke_api.py --base http://localhost:8000 --file ..\\testset\\docs\\06_no_styles.docx
     python scripts\\smoke_api.py --base http://localhost:8000 --resume <job_id>
     python scripts\\smoke_api.py --base http://localhost:8000 --expect-reject --file a.pdf b.doc ...
+    python scripts\\smoke_api.py --base http://localhost:8000 --mode characters --file ..\\testset\\docs\\05_styles.docx
 
 Normal mode: upload, poll every 3 s (status / progress / ETA), download chapter 1 as soon as it is
 ready while later chapters are still generating (early playback, plus a Range request), ping
@@ -14,6 +15,10 @@ connections (proxies may close idle keep-alive connections): a fresh connection,
 4, 8 s, giving up after 2 minutes. The upload (POST) is never retried.
 
 --expect-reject: upload each file and print the error code and HTTP status (all must be rejected).
+
+--mode characters (SPEC §15.1) uploads in character-voices mode and also reports attribution:
+windows done/total while polling, the time until the first chapter was attributed (`attributing`
+ended), each chapter's attribution method, the cast and the warnings.
 """
 
 import argparse
@@ -120,11 +125,12 @@ def wake(api: Api) -> None:
     print(f"health: {r.json()} in {took:.2f} s{note}")
 
 
-def upload(api: Api, path: Path) -> httpx.Response:
+def upload(api: Api, path: Path, mode: str = "single") -> httpx.Response:
     with path.open("rb") as fh:
         return api.client.post(
-            "/api/upload", files={"file": (path.name, fh, "application/octet-stream")}, timeout=300
-        )
+            "/api/upload", files={"file": (path.name, fh, "application/octet-stream")},
+            data={"narration_mode": mode}, timeout=300,
+        )  # fmt: skip
 
 
 def run_rejects(api: Api, files: list[Path]) -> int:
@@ -170,6 +176,7 @@ def run_job(api: Api, job_id: str, out_dir: Path, poll: float, pings: int, start
     job_dir.mkdir(parents=True, exist_ok=True)
 
     synth_first: tuple[float, int] | None = None  # (time, chars_done) at the first 'synthesizing' poll
+    attributing_first: float | None = None  # characters mode: first 'attributing' poll
     early: dict | None = None
     latencies: list[float] = []
     ping_errors: list[str] = []
@@ -191,12 +198,17 @@ def run_job(api: Api, job_id: str, out_dir: Path, poll: float, pings: int, start
         status = job["status"]
         if status == "synthesizing" and synth_first is None:
             synth_first = (now, progress["chars_done"])
+        if status == "attributing" and attributing_first is None:
+            attributing_first = now
+        windows = progress.get("windows_total") or 0
+        window_text = f" windows {progress.get('windows_done', 0)}/{windows}" if windows else ""
         pct = 100 * progress["chars_done"] / progress["chars_total"] if progress["chars_total"] else 0.0
         states = "".join({"pending": ".", "generating": ">", "ready": "R", "failed": "X"}[c["status"]]
                          for c in job["chapters"])  # fmt: skip
         print(
             f"[{fmt_seconds(now - start):>7}] {status:<12} chapters {progress['chapters_done']}/"
-            f"{progress['chapters_total']} [{states}] text {pct:5.1f}% ETA {fmt_seconds(progress['eta_seconds'])}",
+            f"{progress['chapters_total']} [{states}] text {pct:5.1f}% ETA {fmt_seconds(progress['eta_seconds'])}"
+            f"{window_text}",
             flush=True,
         )
 
@@ -290,6 +302,17 @@ def run_job(api: Api, job_id: str, out_dir: Path, poll: float, pings: int, start
             f"median {sorted(latencies)[len(latencies) // 2]:.0f} ms -> {'OK' if max(latencies) < 200 else 'SLOW'}"
             + (f"; {len(ping_errors)} failed" if ping_errors else "")
         )
+    if job.get("narration_mode") == "characters":
+        progress = job["progress"]
+        methods = ", ".join(f"{c['index']}:{c['attribution']}" for c in job["chapters"])
+        print(f"narration mode:    characters; windows {progress['windows_done']}/{progress['windows_total']}")
+        if attributing_first is not None and synth_first is not None:
+            print(f"first attribution: {fmt_seconds(synth_first[0] - attributing_first)} (status 'attributing', chapter 1)")
+        print(f"attribution:       {methods}")
+        for m in job["cast"]:
+            print(f"   cast            {m['name']:<24} {m['gender']:<8} {m['lines']:>4} lines  {m['voice_label']}")
+        for w in job["warnings"]:
+            print(f"warning:           {w}")
     print(f"GET retries:       {api.retries}")
     print(f"files:             {job_dir}")
     return 0 if full_ok and first_ok else 1
@@ -304,6 +327,7 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=BACKEND_DIR / "storage" / "smoke")
     parser.add_argument("--poll", type=float, default=3.0)
     parser.add_argument("--health-pings", type=int, default=20, help="pings while synthesizing (0 = off)")
+    parser.add_argument("--mode", choices=["single", "characters"], default="single", help="narration_mode")
     args = parser.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
     if not args.resume and not args.file:
@@ -321,7 +345,7 @@ def main() -> int:
         else:
             if len(args.file) != 1:
                 parser.error("give exactly one --file (or use --expect-reject)")
-            r = upload(api, args.file[0])
+            r = upload(api, args.file[0], args.mode)
             if r.status_code != 202:
                 print(f"upload rejected: HTTP {r.status_code} {r.text}")
                 return 1

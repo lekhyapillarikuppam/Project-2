@@ -48,18 +48,22 @@ export function apiSource(jobId) {
   }
 }
 
-/** @returns {BookSource} */
-export function sampleSource(baseUrl = import.meta.env.BASE_URL) {
-  const root = `${baseUrl.replace(/\/?$/, '/')}sample/`
+/**
+ * A static sample under public/: `folder` holds job.json and ch_NNN.mp3. `fullFile` is the
+ * full-book file (the one-chapter character-voices sample uses its chapter instead of a copy).
+ * @returns {BookSource}
+ */
+export function sampleSource(baseUrl = import.meta.env.BASE_URL, { folder = 'sample', id = 'sample', fullFile = 'full.mp3' } = {}) {
+  const root = `${baseUrl.replace(/\/?$/, '/')}${folder}/`
   const chapterFile = (n) => `${root}ch_${pad(n, 3)}.mp3`
   return {
     kind: 'sample',
-    id: 'sample',
+    id,
     live: false,
     getJob: (options) => getJson(`${root}job.json`, { ...options, retry: false }),
     audioUrl: chapterFile,
     downloadUrl: chapterFile,
-    fullDownloadUrl: () => `${root}full.mp3`,
+    fullDownloadUrl: () => `${root}${fullFile}`,
     downloadName: (job, n) => {
       if (n == null) return `${bookPart(job)}.mp3`
       const chapter = job?.chapters?.find((c) => c.index === n)

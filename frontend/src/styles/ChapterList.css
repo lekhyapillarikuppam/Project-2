@@ -154,3 +154,9 @@
     grid-row: 1;
   }
 }
+
+.chapter-row__note {
+  margin: 2px 0 0 calc(1.6em + 10px);
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+}

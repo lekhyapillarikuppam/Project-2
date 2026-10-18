@@ -156,8 +156,9 @@ export async function getConfig({ signal } = {}) {
  * POST /api/upload with XMLHttpRequest, because fetch has no upload progress.
  * Returns {promise, abort}; the promise resolves to {job_id, status} on 202 and rejects with an
  * ApiError (or an AbortError after abort()). onProgress(fraction) reports the bytes sent.
+ * narrationMode ('single' | 'characters', SPEC §15.1) is sent as the `narration_mode` field.
  */
-export function uploadFile(file, { onProgress } = {}) {
+export function uploadFile(file, { onProgress, narrationMode } = {}) {
   const xhr = new XMLHttpRequest()
   const promise = new Promise((resolve, reject) => {
     xhr.open('POST', apiUrl('/api/upload'))
@@ -180,6 +181,7 @@ export function uploadFile(file, { onProgress } = {}) {
     xhr.ontimeout = () => reject(networkError())
     xhr.onabort = () => reject(abortError())
     const form = new FormData()
+    if (narrationMode) form.append('narration_mode', narrationMode)
     form.append('file', file, file.name)
     xhr.send(form)
   })

@@ -1,0 +1,34 @@
+[
+  {
+    "name": "Alice",
+    "aliases": [],
+    "gender": "female",
+    "lines": 43,
+    "voice": "en-GB-SoniaNeural",
+    "voice_label": "Voice 1 (female, British)"
+  },
+  {
+    "name": "Hatter",
+    "aliases": [],
+    "gender": "male",
+    "lines": 29,
+    "voice": "en-GB-RyanNeural",
+    "voice_label": "Voice 13 (male, British)"
+  },
+  {
+    "name": "Dormouse",
+    "aliases": [],
+    "gender": "male",
+    "lines": 14,
+    "voice": "en-US-GuyNeural",
+    "voice_label": "Voice 14 (male, American)"
+  },
+  {
+    "name": "March Hare",
+    "aliases": [],
+    "gender": "male",
+    "lines": 14,
+    "voice": "en-AU-WilliamMultilingualNeural",
+    "voice_label": "Voice 15 (male, Australian)"
+  }
+]

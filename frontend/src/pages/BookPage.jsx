@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import CastList from '../components/CastList.jsx'
 import ChapterList from '../components/ChapterList.jsx'
 import ConnectionBanner from '../components/ConnectionBanner.jsx'
 import Notice from '../components/Notice.jsx'
@@ -17,6 +18,7 @@ const NO_CHAPTERS = []
 const STATUS_LABEL = {
   queued: 'Waiting to start',
   extracting: 'Reading',
+  attributing: 'Finding the characters',
   synthesizing: 'Narrating',
   done: 'Ready',
   partial: 'Ready, some chapters failed',
@@ -179,6 +181,18 @@ export default function BookPage({ source }) {
       )}
 
       <ChapterList job={job} source={source} player={player} />
+
+      <CastList cast={job.cast} />
+
+      {source.kind === 'sample' && (
+        <p className="book-page__other-sample">
+          {job.narration_mode === 'characters' ? (
+            <Link to="/sample">Hear the single-narrator sample</Link>
+          ) : (
+            <Link to="/sample/characters">Hear a sample with character voices (Alice, chapter 7)</Link>
+          )}
+        </p>
+      )}
 
       {isApi && (
         <p className="book-page__temporary">

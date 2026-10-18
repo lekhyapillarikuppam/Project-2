@@ -38,21 +38,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from evaluate import git_commit  # noqa: E402
 
 from app.config import get_settings  # noqa: E402
-from app.dialogue.attribute import (  # noqa: E402
-    METHODS,
-    UNKNOWN,
-    Attribution,
-    Method,
-    Roster,
-    baseline_attribute,
-    combine,
-    llm_attribute,
-    rank_texts,
-)
+from app.dialogue.attribute import METHODS, UNKNOWN, Attribution, CharacterBook, Method  # noqa: E402
 from app.dialogue.cast import Cast, normalize_name  # noqa: E402
 from app.dialogue.llm import GroqClient, TokenLimiter, UsageRecord  # noqa: E402
 from app.dialogue.segment import QuoteSpan, SegmentStats, find_quote_spans, quote_family_of_texts  # noqa: E402
-from app.dialogue.voices import VoiceCasting, cast_with_voices, new_casting  # noqa: E402
+from app.dialogue.voices import VoiceCasting, new_casting  # noqa: E402
 from app.pipeline.titles import prf  # noqa: E402
 
 DIALOGUE_DIR = REPO_DIR / "testset_dialogue"
@@ -283,7 +273,8 @@ def score_attribution(
         else:
             gold_member = next((m for m in cast.members if m.keys() & keys), None)
             gender = gold_cast.get(gold, {}).get("gender", "unknown")
-            expected = casting.voice_for(gold_member) if gold_member else casting.minor_voice(gender)
+            assigned = casting.assigned_voice(gold_member) if gold_member else None
+            expected = assigned or casting.minor_voice(gender)
         heard = casting.voice_for(member)
         explicit = any(r.lines[g]["explicit"] for g in indices)
         score.utterances += 1
@@ -307,40 +298,35 @@ def score_attribution(
 async def evaluate_attribution(
     results: list[ChapterResult], methods: list[Method], models: list[str]
 ) -> list[CandidateResult]:
-    """Every candidate on every chapter; each LLM model runs once per chapter (both LLM methods
-    share its answers)."""
+    """Every candidate on every chapter, each chapter treated as a whole book: the production
+    `CharacterBook` (reservations, attribution, lazy casting). Both LLM methods of a model send the
+    same requests, so the second is served from the disk cache."""
     settings = get_settings()
     candidates = [Candidate("baseline", None)] if "baseline" in methods else []
     candidates += [Candidate(m, model) for model in models for m in methods if m != "baseline"]
+    if any(c.model for c in candidates) and not settings.groq_api_key:
+        raise SystemExit("GROQ_API_KEY is not set: LLM methods cannot run")
     out = {c: CandidateResult(c) for c in candidates}
-    llm_methods = [m for m in methods if m != "baseline"]
     for r in results:
         gold_cast = load_gold_cast(r.name)
-        baseline = baseline_attribute(r.paragraphs, r.spans)
-        ranking, genders = rank_texts([r.paragraphs], r.family)
-        if "baseline" in methods:
+        for c in candidates:
+            client = None
+            if c.model is not None:
+                limiter = TokenLimiter(
+                    settings.llm_tokens_per_minute, settings.llm_max_requests_per_day,
+                    output_tokens_per_minute=settings.llm_output_tokens_per_minute,
+                )  # fmt: skip
+                client = GroqClient(settings.groq_api_key, c.model, limiter, cache_dir=settings.llm_cache_path)
             casting = new_casting(settings.edge_voice, settings.max_cast)
-            cast = cast_with_voices(casting, ranking, genders, [])
-            c = Candidate("baseline", None)
-            out[c].per_chapter[r.name] = score_attribution(r, gold_cast, baseline.attributions, cast, casting)
-        if not llm_methods:
-            continue
-        if not settings.groq_api_key:
-            raise SystemExit("GROQ_API_KEY is not set: LLM methods cannot run")
-        for model in models:
-            limiter = TokenLimiter(settings.llm_tokens_per_minute, settings.llm_max_requests_per_day)
-            client = GroqClient(settings.groq_api_key, model, limiter, cache_dir=settings.llm_cache_path)
-            roster = Roster()
-            llm = await llm_attribute(r.paragraphs, r.spans, client, roster, baseline, settings.llm_window_words)
-            for method in llm_methods:
-                combined = combine(method, baseline, llm)
-                casting = new_casting(settings.edge_voice, settings.max_cast)
-                cast = cast_with_voices(casting, ranking, genders, roster.reports(), roster.distinct)
-                result = out[Candidate(method, model)]
-                result.per_chapter[r.name] = score_attribution(r, gold_cast, combined.attributions, cast, casting)
+            book = CharacterBook([r.paragraphs], r.family, c.method, client, settings.llm_window_words, casting)
+            attribution = await book.attribute(r.paragraphs)
+            book.cast_chapter(attribution)
+            result = out[c]
+            result.per_chapter[r.name] = score_attribution(r, gold_cast, attribution.attributions, book.cast, casting)
+            if client is not None:
                 result.usage += client.usage
-                result.windows_total += llm.windows_total
-                result.windows_baseline += llm.windows_total - llm.windows_llm
+                result.windows_total += attribution.windows_total
+                result.windows_baseline += attribution.windows_total - attribution.windows_llm
     return list(out.values())
 
 

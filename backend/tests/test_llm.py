@@ -101,6 +101,35 @@ def test_estimate_is_replaced_by_the_real_token_count() -> None:
     assert clock.sleeps == []
 
 
+def test_completion_token_budget_paces_requests() -> None:
+    clock = FakeClock()
+    limiter = TokenLimiter(7000, 800, output_tokens_per_minute=1000, clock=clock, sleep=clock.sleep)
+    run(limiter.acquire(1000, 700))
+    clock.now += 5
+    run(limiter.acquire(1000, 700))  # 1400 > 1000 completion tokens: wait for the first to expire
+    assert clock.sleeps == [pytest.approx(55)]
+
+
+def test_completion_estimate_is_corrected_from_usage() -> None:
+    clock = FakeClock()
+    limiter = TokenLimiter(7000, 800, output_tokens_per_minute=1000, clock=clock, sleep=clock.sleep)
+    run(limiter.acquire(1000, 700))
+    limiter.record(800, 200)  # the reply was shorter than estimated
+    run(limiter.acquire(1000, 700))
+    assert clock.sleeps == []
+
+
+def test_client_estimates_12_per_quote_plus_40() -> None:
+    clock = FakeClock()
+    server = Server(reply("{}"))  # usage: 10 completion tokens
+    limiter = TokenLimiter(100_000, 800, output_tokens_per_minute=1000, clock=clock, sleep=clock.sleep)
+    c = GroqClient("key", "qwen/qwen3.8-27b", limiter, transport=httpx.MockTransport(server), timer=clock)
+    assert GroqClient.estimate_output_tokens(10) == 160
+    run(c.complete("sys", "user", quotes=70))  # estimate 880, corrected to 10
+    run(c.complete("sys", "other", quotes=70))  # 10 + 880 fits: no wait
+    assert clock.sleeps == []
+
+
 def test_a_wait_over_the_limit_raises_unavailable() -> None:
     clock = FakeClock()
     limiter = TokenLimiter(7000, 800, clock=clock, sleep=clock.sleep, max_wait=120)
@@ -111,7 +140,7 @@ def test_a_wait_over_the_limit_raises_unavailable() -> None:
 
 def test_remaining_tokens_header_blocks_until_reset() -> None:
     clock = FakeClock()
-    headers = {"x-ratelimit-remaining-tokens": "50", "x-ratelimit-reset-tokens": "7.5s"}
+    headers = {"x-ratelimit-remaining-tokens": "10", "x-ratelimit-reset-tokens": "7.5s"}
     server = Server(reply("{}", headers=headers), reply("{}"))
     c = client(server, clock)
     run(c.complete("sys", "first"))

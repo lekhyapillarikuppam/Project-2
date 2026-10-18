@@ -1,7 +1,7 @@
 # AI-Powered Audiobook Generator — Specification (v1)
 
 Course: UMC301 Applied Data Science and Artificial Intelligence — Project 2
-Status: revision 10 (2026-10-18, Phase 6.1 interpretations recorded; v2 phases regrouped into 6.2 and 6.3; model selection rule fixed in advance). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
+Status: revision 11 (2026-10-19, Phase 6.2 results: D40 model/method, D41 voice casting, D42 output-token pacing; 6.2 interpretations recorded). Locked decisions live in `DECISIONS.md`; this file describes *how* the system works.
 
 ---
 
@@ -411,7 +411,7 @@ Turns each paragraph's single narrator segment into alternating `narration` and 
 3. **Multi-paragraph quotes**: a paragraph that ends inside an open quote, followed by a paragraph that starts with an opening mark, continues the same utterance (typographic convention) — **unless** the next paragraph contains an explicit speech tag naming a speaker (`said X`, `X said`), in which case the open quote is closed at the end of the first paragraph (damaged-PDF case: missing closing mark).
    - **3b. In-paragraph damaged closer** (added in Phase 6.1): while a quote is open, one of `! ? , . ;` followed by whitespace and a speech tag (`said Alice`, `the Hatter said`, `Alice said`, a lowercase pronoun + verb such as `she thought`, optionally with an `-ly` adverb or a leading `and`) closes the quote right after the punctuation. Case-sensitive: a new sentence inside a quote would be capitalised. Known risk: reported speech inside a correctly closed quote (`‘…, said I, …’`).
    - An opener-only mark while a quote is already open closes the open quote just before it and starts a new one (counted as `reopened`).
-4. **Broken quotes**: `“Well,” said Alice, “I suppose so.”` → two quote segments around a narration segment; both belong to one **utterance** id (they share a speaker). Two quotes in one paragraph are one utterance unless the second has its own speech tag right after it, or the narration between them ends a sentence and introduces it (`The Hatter said, ‘…’`).
+4. **Broken quotes**: `“Well,” said Alice, “I suppose so.”` → two quote segments around a narration segment; both belong to one **utterance** id (they share a speaker). Two quotes in one paragraph are one utterance unless the second has its own speech tag right after it, or the narration between them ends a sentence and introduces it (`The Hatter said, ‘…’`), or the narration starts with `and` / `but` / `while` followed by a newly named speaker (`… and the Dormouse sulkily remarked, ‘…’`; pronouns don't trigger this).
 5. Quote spans **include** their marks (start at the opener, end after the closer). Marks are stripped before TTS. Nested quotes (the other family) inside a quote stay part of the outer quote.
 5a. **Labelling conventions** (also used by the evaluation): quoted thoughts (`‘…,’ thought Alice`) are utterances of the thinker; speech by several characters at once (`‘No room!’ they cried`) is `UNKNOWN`; quoted writing that nobody says aloud (a label `‘DRINK ME’`, a quoted word inside narration) is **not** an utterance.
 6. Unbalanced quote at paragraph end without a continuation → close it at paragraph end and log a warning count.
@@ -426,6 +426,9 @@ Two methods behind one interface; both return, per utterance, a speaker name or 
 - Explicit tags adjacent to the utterance: `<quote> said NAME`, `<quote> NAME said`, `NAME said, <quote>`, `said the NOUN PHRASE` (`said the Hatter`, `said the March Hare`). NAME = capitalised name or `the` + capitalised/lowercase noun phrase up to 4 words.
 - Pronoun tags (`she said`) → the most recent explicitly named character of matching gender in the last 3 paragraphs if exactly one candidate, else UNKNOWN.
 - Turn-taking: inside a run of consecutive dialogue-only paragraphs, if the last two explicitly tagged speakers are A then B, untagged utterances alternate A, B, A… until the run ends.
+- `they` tags (`they cried`) are group speech: UNKNOWN, and they end a turn-taking run.
+- Sentence-initial pronouns and conjunctions (`She`, `But`, `Then`…) are never names; lowercase noun phrases (`said the girl shortly`) end before an `-ly` adverb or a preposition.
+- Turn-taking runs over paragraphs that contain a quote and at most 20 words of narration. Pronoun tags look at names from explicit tags in the current and previous 2 paragraphs.
 - Everything else → UNKNOWN.
 
 **LLM (Groq, D32)**:
@@ -434,7 +437,8 @@ Two methods behind one interface; both return, per utterance, a speaker name or 
 - One request per window (system + user prompt), `temperature 0`, JSON response format. `speaker` is a name from the supplied list, a name in `new`, or `"UNKNOWN"`. The prompt states the §15.2 rule 5a conventions (thoughts → thinker, group speech → UNKNOWN).
 - Validation: every id answered exactly once, speakers non-empty strings; otherwise one retry with the validation error appended; then the **baseline** result is used for that window (D34).
 - Rate limiting is **token-based**: estimate each request's tokens (prompt chars ÷ 4 + expected output) and keep a rolling 60 s budget of `LLM_TOKENS_PER_MINUTE` (default 7,000, below Groq's 8,000); also honour `x-ratelimit-remaining-tokens`, `x-ratelimit-reset-tokens`, `retry-after` and 429. `LLM_MAX_REQUESTS_PER_DAY` (default 800) caps daily use. If the daily budget is exhausted, or a window waits more than 120 s for budget, that window uses the baseline (D34).
-- Requests use `httpx` against Groq's OpenAI-compatible endpoint (no new SDK dependency). Model from `LLM_MODEL`.
+- **Output-token pacing (D42)**: the limiter also keeps a rolling 60 s budget of completion tokens, `LLM_OUTPUT_TOKENS_PER_MINUTE` (default 1,000, Groq's limit for the chosen model on this key), estimated before a request (≈ 12 tokens per quote id + 40) and corrected from `usage` afterwards, so requests are paced instead of bouncing on 429.
+- Requests use `httpx` against Groq's OpenAI-compatible endpoint (no new SDK dependency). Model from `LLM_MODEL` (D40: `qwen/qwen3.8-27b`, `reasoning_effort: "none"`, which Groq accepts but which changes nothing: the model doesn't think there). Method from `ATTRIBUTION_METHOD` (D40: `llm`).
 - Results cached per job (window hash → response) so a retry never pays twice. The evaluation additionally caches responses on disk (`backend/storage/llm_cache/`, gitignored, keyed by model + prompt hash) so re-scoring never calls Groq again.
 - Every request records prompt tokens, completion tokens (from the response `usage`) and latency, for the evaluation.
 
@@ -451,7 +455,10 @@ Two methods behind one interface; both return, per utterance, a speaker name or 
 - Display name: the most frequent surface form.
 
 ### 15.5 Voice casting (`app/dialogue/voices.py`)
-- **Ranking before narration**: a fast baseline pass over the whole book (local, no LLM) counts lines per character; this ranking decides who gets the `MAX_CAST` distinct voices up front. Characters first found by the LLM later get the next free voice in their pool (or the minor voice once the pool is used up). Voices never change once a chapter using them has been narrated.
+- **Casting (D41, replaces the up-front assignment)**: voices are assigned **lazily**, just before each chapter is narrated, using that chapter's attribution (LLM names and genders), and never change afterwards.
+  - The whole-book baseline pass (local, no LLM) is used only to **reserve** distinct voices: up to `MAX_CAST − 2` capitalised names (never lowercase epithets like `the girl`) with at least 3 explicitly tagged lines in the book. A reserved character gets its voice on first narration, with the gender the LLM reports then.
+  - Unreserved characters get a free distinct voice on first narration if they have at least 2 lines in that chapter and slots remain; otherwise the minor voice of their gender.
+  - So a major character is never pushed to a minor voice by junk names, and the gender used is the LLM's, not the baseline's guess.
 - Narrator: `EDGE_VOICE` (unchanged).
 - Pools: English edge-tts neural voices, split female / male (verified list in config, excluding the narrator voice), ordered so adjacent picks differ in accent.
 - The `MAX_CAST` (default 8) characters ranked highest get distinct voices: females from the female pool, males from the male pool, `unknown` from whichever pool has more unused voices.
@@ -468,7 +475,7 @@ Two methods behind one interface; both return, per utterance, a speaker name or 
 ### 15.7 Limits
 - Same document limits as v1 (§4).
 - Characters mode is offered only when `GROQ_API_KEY` is set.
-- Expected LLM use: ~1 request per 1,200 words (≈ 85 for a 100,000-word book). At Groq's 8,000 tokens/minute that is roughly 2–4 windows per minute; because attribution runs one chapter ahead of narration (D37), most of it overlaps with narration time.
+- Expected LLM use: ~1 request per 1,200 words (≈ 85 for a 100,000-word book, ≈ 200k tokens). The binding limit is the model's **1,000 completion tokens/minute**: a dialogue-dense window (56 quotes) needs ~650, a typical one ~300, so 1.5–3 windows per minute and **≈ 30–60 min of attribution for the largest book**, longer than its narration (~15 min). Attribution runs one chapter ahead (D37), so listening can start after chapter 1 is attributed and narrated; later chapters may wait for attribution. Daily request/token caps → remaining windows use the baseline (D34).
 
 ### 15.8 Frontend
 - Upload page: a two-option choice "Single narrator" (default) / "Character voices (beta)", with one line: "Uses an AI service (Groq) to work out who is speaking; the document's text is sent to it." Hidden when `character_voices_available` is false.
@@ -483,6 +490,7 @@ Two methods behind one interface; both return, per utterance, a speaker name or 
   - **Attribution accuracy** on matched utterances (speaker equal after alias mapping), split into **explicit** (gold `explicit: true`) and **implicit**; also % predicted UNKNOWN.
   - **Voice accuracy** (what the listener hears): using the system's own voice map for the chapter, the *expected* voice of a gold utterance is the voice the system assigned to the gold speaker's character (matched by alias), else the minor voice for the gold speaker's gender, else the narrator voice if gold is `UNKNOWN`; a matched utterance is voice-correct if its synthesized voice equals the expected voice.
   - For each method: baseline, llm, llm_with_baseline_override; plus LLM requests and seconds per chapter.
+  - A gold utterance is scored once, using the predicted utterance of its first matched span; gold utterances missed by detection are counted, not scored.
 - **Label lint** (`label_dialogue.py --lint`): label-file-only checks (no segmenter): overlapping gold spans (error), spans that don't start/end at a quote mark, spans that may contain narration (punctuation + speech tag inside the span), `Not a quote` decisions followed by `thought`, and adjacent spans separated by a speech tag that don't share an utterance (warnings).
 - Sets: dev = `alice_ch07`, `brown_glass`; **held-out = `ball_ch03`** (never inspected during development; first run reported — D25 applies).
 

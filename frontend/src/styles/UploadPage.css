@@ -102,3 +102,44 @@
   font-family: var(--font-serif);
   font-weight: 600;
 }
+
+/* Narration mode choice (SPEC §15.8) */
+.mode-choice {
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: center;
+}
+
+.mode-choice__legend {
+  float: left;
+  margin-right: 4px;
+  font-weight: 600;
+}
+
+.mode-choice__option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--touch);
+  cursor: pointer;
+}
+
+.mode-choice__option input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.mode-choice__notes {
+  flex-basis: 100%;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.mode-choice__notes p {
+  margin: 0 0 4px;
+}

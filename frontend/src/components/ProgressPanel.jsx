@@ -9,6 +9,10 @@ function statusText(job) {
       return 'Waiting for the server to start on your document…'
     case 'extracting':
       return 'Reading your document and finding chapters…'
+    case 'attributing': {
+      const { windows_done: done = 0, windows_total: windows = 0 } = job.progress ?? {}
+      return windows ? `Finding the characters… (window ${Math.min(done + 1, windows)} of ${windows})` : 'Finding the characters…'
+    }
     case 'synthesizing': {
       const position = job.chapters.findIndex((c) => c.status === 'generating')
       const n = position >= 0 ? position + 1 : Math.min((job.progress?.chapters_done ?? 0) + 1, total)
@@ -19,7 +23,7 @@ function statusText(job) {
   }
 }
 
-/** Progress while the job is queued, extracting or synthesizing. */
+/** Progress while the job is queued, extracting, attributing (character voices) or synthesizing. */
 export default function ProgressPanel({ job }) {
   const { chars_done: done = 0, chars_total: total = 0, eta_seconds: eta, chapters_done: chaptersDone = 0 } =
     job.progress ?? {}

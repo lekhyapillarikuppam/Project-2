@@ -46,6 +46,35 @@ function typeList(types) {
   return names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names.at(-1)}` : names[0]
 }
 
+/** Single narrator (default) or character voices (SPEC §15.8; privacy D36, timing D42). */
+function ModeChoice({ mode, onChange }) {
+  return (
+    <fieldset className="mode-choice">
+      <legend className="mode-choice__legend">Narration</legend>
+      <label className="mode-choice__option">
+        <input type="radio" name="narration_mode" value="single" checked={mode === 'single'} onChange={() => onChange('single')} />
+        <span>Single narrator</span>
+      </label>
+      <label className="mode-choice__option">
+        <input
+          type="radio"
+          name="narration_mode"
+          value="characters"
+          checked={mode === 'characters'}
+          onChange={() => onChange('characters')}
+        />
+        <span>Character voices (beta)</span>
+      </label>
+      {mode === 'characters' && (
+        <div className="mode-choice__notes">
+          <p>Uses an AI service (Groq) to work out who is speaking; the document&rsquo;s text is sent to it.</p>
+          <p>Character voices take longer to prepare, especially for long books.</p>
+        </div>
+      )}
+    </fieldset>
+  )
+}
+
 export default function UploadPage() {
   const navigate = useNavigate()
   const [config, setConfig] = useState(null)
@@ -53,8 +82,10 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0)
   const [file, setFile] = useState(null)
   const [error, setError] = useState(null)
+  const [mode, setMode] = useState('single') // narration_mode (SPEC §15.1)
   const uploadRef = useRef(null)
   const limits = limitsFrom(config)
+  const charactersAvailable = config?.character_voices_available === true
 
   useEffect(() => {
     document.title = `${APP_NAME} · ${TAGLINE}`
@@ -80,6 +111,7 @@ export default function UploadPage() {
     setProgress(0)
     setPhase('uploading')
     const upload = uploadFile(chosen, {
+      narrationMode: charactersAvailable ? mode : undefined,
       onProgress: (fraction) => {
         setProgress(fraction)
         if (fraction >= 1) setPhase('checking')
@@ -140,7 +172,10 @@ export default function UploadPage() {
             )}
           </div>
         ) : (
-          <Dropzone onFile={start} accept={limits.acceptedTypes.join(',')} hint={hint} />
+          <>
+            {charactersAvailable && <ModeChoice mode={mode} onChange={setMode} />}
+            <Dropzone onFile={start} accept={limits.acceptedTypes.join(',')} hint={hint} />
+          </>
         )}
 
         {error && (

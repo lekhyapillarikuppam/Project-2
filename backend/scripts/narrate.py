@@ -32,19 +32,11 @@ CHARACTERS_OUT_DIR = REPO_DIR / "testset" / "output" / "characters"
 sys.path.insert(0, str(BACKEND_DIR))
 
 from app.config import Settings, get_settings  # noqa: E402
-from app.dialogue.attribute import (  # noqa: E402
-    UNKNOWN,
-    Attribution,
-    Roster,
-    apply_speakers,
-    attribute_chapter,
-    chapter_texts,
-    rank_characters,
-)
+from app.dialogue.attribute import UNKNOWN, Attribution, CharacterBook, apply_speakers, chapter_texts  # noqa: E402
 from app.dialogue.cast import Cast  # noqa: E402
-from app.dialogue.llm import GroqClient, TokenLimiter  # noqa: E402
+from app.dialogue.llm import client_from_settings  # noqa: E402
 from app.dialogue.segment import QuoteFamily, detect_quote_family, find_quote_spans, segment_chapter  # noqa: E402
-from app.dialogue.voices import VoiceCasting, cast_with_voices, new_casting  # noqa: E402
+from app.dialogue.voices import VoiceCasting, new_casting  # noqa: E402
 from app.dialogue.windows import collect_utterances  # noqa: E402
 from app.models import Chapter, DocumentModel, Paragraph, Segment  # noqa: E402
 from app.pipeline import PipelineError, run_pipeline  # noqa: E402
@@ -156,39 +148,22 @@ async def attribute_document(
     """Characters mode: rank the whole book, attribute the chosen chapters, cast voices.
     Returns the segmented chapters with speakers, speaker -> voice id, the cast, the casting, and
     per (unsegmented) chapter its attributions and the method used."""
-    family = detect_quote_family(full)
-    ranking, genders = rank_characters(full)
-    method = settings.attribution_method
-    client = None
-    if method != "baseline":
-        if settings.groq_api_key:
-            limiter = TokenLimiter(settings.llm_tokens_per_minute, settings.llm_max_requests_per_day)
-            client = GroqClient(settings.groq_api_key, settings.llm_model, limiter)
-        else:
-            logger.warning("GROQ_API_KEY is not set: using the baseline")
-    roster = Roster()
-    attributed: list[tuple[Chapter, dict[str, Attribution], str]] = []
-    for chapter in chapters:
-        texts = chapter_texts(chapter)
-        spans, _ = find_quote_spans(texts, family)
-        result, _ = await attribute_chapter(texts, spans, method, client, roster, settings.llm_window_words)
-        used = "baseline" if client is None else result.method_used
-        attributed.append((chapter, result.attributions, used))
-
+    client = client_from_settings(settings)
+    if settings.attribution_method != "baseline" and client is None:
+        logger.warning("GROQ_API_KEY is not set: using the baseline")
     casting = new_casting(settings.edge_voice, settings.max_cast)
-    cast = cast_with_voices(casting, ranking, genders, roster.reports(), roster.distinct)
+    book = CharacterBook.for_document(full, settings.attribution_method, client, settings.llm_window_words, casting)
     voices: dict[str, str] = {}
     out: list[Chapter] = []
-    for chapter, attributions, _ in attributed:
-        segmented, _ = segment_chapter(chapter, family)
-        speakers: dict[str, str] = {}
-        for uid, a in attributions.items():
-            member = cast.resolve(a.speaker) if a.speaker != UNKNOWN else None
-            if member is not None:
-                speakers[uid] = member.name
-                voices[member.name] = casting.voice_for(member).id
+    attributed: list[tuple[Chapter, dict[str, Attribution], str]] = []
+    for chapter in chapters:  # in narration order: voices are cast lazily, chapter by chapter (D41)
+        result = await book.attribute(chapter_texts(chapter))
+        speakers, chapter_voices = book.cast_chapter(result)
+        voices.update(chapter_voices)
+        segmented, _ = segment_chapter(chapter, book.family)
         out.append(apply_speakers(segmented, speakers))
-    return out, voices, cast, casting, attributed
+        attributed.append((chapter, result.attributions, "baseline" if client is None else result.method_used))
+    return out, voices, book.cast, casting, attributed
 
 
 def write_character_reports(
@@ -227,6 +202,13 @@ def write_character_reports(
         rows.append(f"| {m.name} | {m.gender} | {m.lines} | {voice.label} ({voice.id}) | {', '.join(m.aliases)} |")
     cast_path = out_dir / f"{stem}_cast.md"
     cast_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    # The job object's `cast` (SPEC §15.1): characters with a voice, most lines first.
+    cast_json = [
+        {"name": m.name, "aliases": m.aliases, "gender": m.gender, "lines": m.lines, "voice": v.id, "voice_label": v.label}
+        for m in cast.members
+        if (v := casting.assigned_voice(m)) is not None
+    ]
+    (out_dir / f"{stem}_cast.json").write_text(json.dumps(cast_json, indent=2), encoding="utf-8")
     return attributed_path, cast_path
 
 
