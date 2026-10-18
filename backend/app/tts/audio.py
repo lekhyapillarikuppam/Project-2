@@ -31,6 +31,7 @@ _ENCODE_ARGS = [
     "-write_xing", "0", "-id3v2_version", "0", "-f", "mp3",
 ]  # fmt: skip
 
+SPEAKER_PAUSE_MS = 150  # between segments of different speakers inside a paragraph (SPEC §15.6)
 PARAGRAPH_PAUSE_MS = 400
 TITLE_PAUSE_MS = 1000
 CHAPTER_PAUSE_MS = 2000

@@ -157,6 +157,13 @@ def test_joins_previous() -> None:
     assert not joins_previous(" said Alice. ", " said the Hatter.")
 
 
+def test_conjunction_and_new_named_speaker_starts_a_new_utterance() -> None:
+    assert not joins_previous(" and the Dormouse sulkily remarked, ", "")
+    assert not joins_previous(", but Alice replied, ", "")
+    assert joins_previous(" said Alice, and she added, ", "")
+    assert joins_previous(" and she added, ", "")
+
+
 def test_multi_paragraph_continuation() -> None:
     paragraphs = ["“It was a long time ago,” he said, “and we were young.", "“Then the war came.”"]
     spans, stats = find_quote_spans(paragraphs, "double")

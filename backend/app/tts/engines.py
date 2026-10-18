@@ -257,12 +257,16 @@ class FallbackEngine:
         await self.synthesize_tracked(text, out_path, voice)
 
 
-async def synthesize_tracked(engine: TTSEngine, text: str, out_path: Path) -> str:
-    """Synthesize with any engine and return the name of the engine that produced the audio."""
+async def synthesize_tracked(engine: TTSEngine, text: str, out_path: Path, voice: str | None = None) -> str:
+    """Synthesize with any engine and return the name of the engine that produced the audio.
+    `voice` None means the engine's own (narrator) voice."""
     tracked = getattr(engine, "synthesize_tracked", None)
     if tracked is not None:
-        return await tracked(text, out_path)
-    await engine.synthesize(text, out_path)
+        return await tracked(text, out_path) if voice is None else await tracked(text, out_path, voice)
+    if voice is None:
+        await engine.synthesize(text, out_path)
+    else:
+        await engine.synthesize(text, out_path, voice)
     return engine.name
 
 

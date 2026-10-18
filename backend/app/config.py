@@ -50,11 +50,14 @@ class Settings(BaseSettings):
     tts_max_retries: int = 3
     tts_fallback_after_consecutive_failures: int = 5
 
-    # v2 character voices (SPEC §15, D32); settings only until Phase 6.1
+    # v2 character voices (SPEC §15, D32)
     groq_api_key: str = ""
     llm_model: str = "qwen/qwen3.8-27b"
-    llm_max_requests_per_minute: int = 25
+    attribution_method: Literal["baseline", "llm", "llm_with_baseline_override"] = "llm"  # D40
+    llm_window_words: int = 1200
+    llm_tokens_per_minute: int = 7000  # rolling 60 s budget, below Groq's 8,000 (D37)
     llm_max_requests_per_day: int = 800
+    llm_cache_dir: Path = Path("storage/llm_cache")  # evaluation only: responses cached on disk
     max_cast: int = 8
 
     @property
@@ -69,6 +72,11 @@ class Settings(BaseSettings):
     @property
     def piper_model_full_path(self) -> Path:
         p = self.piper_model_path
+        return p if p.is_absolute() else BACKEND_DIR / p
+
+    @property
+    def llm_cache_path(self) -> Path:
+        p = self.llm_cache_dir
         return p if p.is_absolute() else BACKEND_DIR / p
 
     @property

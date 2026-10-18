@@ -10,7 +10,7 @@ import asyncio
 import logging
 import shutil
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -103,13 +103,14 @@ class ChapterPlan:
         return sum(len(c.text) for c in self.chunks)
 
 
-def plan_narration(doc: DocumentModel, max_chars: int) -> list[ChapterPlan]:
-    """Chunk every chapter (normalized text). The worker uses it to know `chars_total` up front."""
-    return [_plan_chapter(c, max_chars) for c in doc.chapters]
+def plan_narration(doc: DocumentModel, max_chars: int, voices: Mapping[str, str] | None = None) -> list[ChapterPlan]:
+    """Chunk every chapter (normalized text). The worker uses it to know `chars_total` up front.
+    `voices` (speaker -> voice id) is given in characters mode only (SPEC §15.6)."""
+    return [_plan_chapter(c, max_chars, voices) for c in doc.chapters]
 
 
-def _plan_chapter(chapter: Chapter, max_chars: int) -> ChapterPlan:
-    return ChapterPlan(chapter.index, chapter.title, chunk_chapter(chapter, max_chars))
+def _plan_chapter(chapter: Chapter, max_chars: int, voices: Mapping[str, str] | None = None) -> ChapterPlan:
+    return ChapterPlan(chapter.index, chapter.title, chunk_chapter(chapter, max_chars, voices))
 
 
 @dataclass
@@ -139,7 +140,7 @@ async def _synthesize_chunks(
         nonlocal done
         async with semaphore:
             path = work / f"{chunk.seq + 1:04d}.mp3"
-            engine_name = await synthesize_tracked(engine, chunk.text, path)
+            engine_name = await synthesize_tracked(engine, chunk.text, path, chunk.voice)
         used.add(engine_name)
         run.chars_done += len(chunk.text)
         run.engines.add(engine_name)
@@ -184,6 +185,8 @@ def _assemble_chapter(chunks: list[Chunk], work: Path, out_path: Path) -> float:
             parts.append(title_pause)
         elif chunk.ends_paragraph and not is_last:
             parts.append(paragraph_pause)
+        elif not is_last and chunks[i + 1].speaker_change:
+            parts.append(audio.silence_clip(audio.SPEAKER_PAUSE_MS, silences))
 
     # Part durations from the MP3 frame headers (no ffprobe per part); one ffprobe of the joined
     # chapter is the cross-check.

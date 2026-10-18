@@ -4,6 +4,12 @@
         [--chapters 1,3-4] [--engine edge|piper|fallback] [--fail-edge N] [--full]
     (edge = edge-tts with retries and no fallback, as on the server; default from TTS_FALLBACK)
     python scripts\\narrate.py --text-file <lines.txt> --out <dir> [--engine ...]
+    python scripts\\narrate.py <document> --mode characters [--chapters 7] [--out <dir>]
+
+--mode characters (SPEC §15.6) segments and attributes the chosen chapters (ATTRIBUTION_METHOD,
+LLM_MODEL), casts voices and narrates multi-voice; besides the chapter MP3s it writes
+<stem>_attributed.md (every quote: paragraph, speaker, method, reason, voice) and <stem>_cast.md.
+Its default --out is testset/output/characters/.
 
 --fail-edge N (dev only) makes the edge engine raise on its first N calls, to show the per-chunk
 fallback and the switch to Piper (or, with --engine edge, failed chapters and the stop). --text-file narrates a text file as one chapter with one
@@ -21,16 +27,33 @@ import time
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
+REPO_DIR = BACKEND_DIR.parent
+CHARACTERS_OUT_DIR = REPO_DIR / "testset" / "output" / "characters"
 sys.path.insert(0, str(BACKEND_DIR))
 
-from app.config import get_settings  # noqa: E402
+from app.config import Settings, get_settings  # noqa: E402
+from app.dialogue.attribute import (  # noqa: E402
+    UNKNOWN,
+    Attribution,
+    Roster,
+    apply_speakers,
+    attribute_chapter,
+    chapter_texts,
+    rank_characters,
+)
+from app.dialogue.cast import Cast  # noqa: E402
+from app.dialogue.llm import GroqClient, TokenLimiter  # noqa: E402
+from app.dialogue.segment import QuoteFamily, detect_quote_family, find_quote_spans, segment_chapter  # noqa: E402
+from app.dialogue.voices import VoiceCasting, cast_with_voices, new_casting  # noqa: E402
+from app.dialogue.windows import collect_utterances  # noqa: E402
 from app.models import Chapter, DocumentModel, Paragraph, Segment  # noqa: E402
 from app.pipeline import PipelineError, run_pipeline  # noqa: E402
 from app.tts import audio  # noqa: E402
 from app.tts.engines import FallbackEngine, TTSEngine, build_engine  # noqa: E402
-from app.tts.narrator import ProgressEvent, build_full_book, narrate_document  # noqa: E402
+from app.tts.narrator import ProgressEvent, build_full_book, narrate_document, plan_narration  # noqa: E402
 
 logger = logging.getLogger("narrate")
+EXCERPT_CHARS = 70
 
 
 class FlakyEngine:
@@ -122,6 +145,91 @@ def make_engine(kind: str | None, fail_edge: int) -> TTSEngine:
     return engine
 
 
+def _excerpt(text: str) -> str:
+    text = " ".join(text.split()).replace("|", "\\|")
+    return text if len(text) <= EXCERPT_CHARS else text[: EXCERPT_CHARS - 1] + "…"
+
+
+async def attribute_document(
+    full: DocumentModel, chapters: list[Chapter], settings: Settings
+) -> tuple[list[Chapter], dict[str, str], Cast, VoiceCasting, list[tuple[Chapter, dict[str, Attribution], str]]]:
+    """Characters mode: rank the whole book, attribute the chosen chapters, cast voices.
+    Returns the segmented chapters with speakers, speaker -> voice id, the cast, the casting, and
+    per (unsegmented) chapter its attributions and the method used."""
+    family = detect_quote_family(full)
+    ranking, genders = rank_characters(full)
+    method = settings.attribution_method
+    client = None
+    if method != "baseline":
+        if settings.groq_api_key:
+            limiter = TokenLimiter(settings.llm_tokens_per_minute, settings.llm_max_requests_per_day)
+            client = GroqClient(settings.groq_api_key, settings.llm_model, limiter)
+        else:
+            logger.warning("GROQ_API_KEY is not set: using the baseline")
+    roster = Roster()
+    attributed: list[tuple[Chapter, dict[str, Attribution], str]] = []
+    for chapter in chapters:
+        texts = chapter_texts(chapter)
+        spans, _ = find_quote_spans(texts, family)
+        result, _ = await attribute_chapter(texts, spans, method, client, roster, settings.llm_window_words)
+        used = "baseline" if client is None else result.method_used
+        attributed.append((chapter, result.attributions, used))
+
+    casting = new_casting(settings.edge_voice, settings.max_cast)
+    cast = cast_with_voices(casting, ranking, genders, roster.reports(), roster.distinct)
+    voices: dict[str, str] = {}
+    out: list[Chapter] = []
+    for chapter, attributions, _ in attributed:
+        segmented, _ = segment_chapter(chapter, family)
+        speakers: dict[str, str] = {}
+        for uid, a in attributions.items():
+            member = cast.resolve(a.speaker) if a.speaker != UNKNOWN else None
+            if member is not None:
+                speakers[uid] = member.name
+                voices[member.name] = casting.voice_for(member).id
+        out.append(apply_speakers(segmented, speakers))
+    return out, voices, cast, casting, attributed
+
+
+def write_character_reports(
+    stem: str,
+    out_dir: Path,
+    family: QuoteFamily | None,
+    chapters: list[tuple[Chapter, dict[str, Attribution], str]],
+    cast: Cast,
+    casting: VoiceCasting,
+    settings: Settings,
+) -> tuple[Path, Path]:
+    method = settings.attribution_method
+    model = settings.llm_model if method != "baseline" else "-"
+    lines = [f"# {stem}: attributed quotes", "", f"Method `{method}`, model `{model}`.", ""]
+    for chapter, attributions, used in chapters:
+        texts = chapter_texts(chapter)
+        spans, _ = find_quote_spans(texts, family)
+        utterances = {u.id: u for u in collect_utterances(spans)}
+        lines += [f"## Chapter {chapter.index}: {chapter.title} (attribution: {used})", "",
+                  "| ¶ | Quote | Speaker | Method | Reason | Voice |", "|---|---|---|---|---|---|"]  # fmt: skip
+        for uid, a in attributions.items():
+            u = utterances[uid]
+            quote = " … ".join(texts[p][s:e] for p, s, e in u.parts)
+            member = cast.resolve(a.speaker) if a.speaker != UNKNOWN else None
+            voice = casting.voice_for(member)
+            speaker = member.name if member else UNKNOWN
+            lines.append(f"| {u.first_paragraph} | {_excerpt(quote)} | {speaker} | {a.method} | {a.reason} | {voice.label} |")
+        lines.append("")
+    attributed_path = out_dir / f"{stem}_attributed.md"
+    attributed_path.write_text("\n".join(lines), encoding="utf-8")
+
+    rows = [f"# {stem}: cast", "", "| Name | Gender | Lines | Voice | Aliases |", "|---|---|---|---|---|",
+            f"| Narrator | | | {casting.narrator.label} ({casting.narrator.id}) | |"]  # fmt: skip
+    for m in cast.members:
+        voice = casting.voice_for(m)
+        rows.append(f"| {m.name} | {m.gender} | {m.lines} | {voice.label} ({voice.id}) | {', '.join(m.aliases)} |")
+    cast_path = out_dir / f"{stem}_cast.md"
+    cast_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return attributed_path, cast_path
+
+
 def _fmt_duration(seconds: float) -> str:
     m, s = divmod(int(round(seconds)), 60)
     h, m = divmod(m, 60)
@@ -132,8 +240,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Narrate a document into chapter MP3s.")
     parser.add_argument("source", type=Path, nargs="?", help="document.json, .pdf or .docx")
     parser.add_argument("--text-file", type=Path, help="narrate a text file, one paragraph per line")
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--out", type=Path, help="output folder (characters mode: testset/output/characters)")
     parser.add_argument("--chapters", help="e.g. 1,3-4")
+    parser.add_argument("--mode", choices=["single", "characters"], default="single", help="narration mode (SPEC §15)")
     parser.add_argument(
         "--engine",
         choices=["edge", "piper", "fallback"],
@@ -145,6 +254,13 @@ def main() -> None:
     args = parser.parse_args()
     if not args.source and not args.text_file:
         parser.error("give a document or --text-file")
+    characters = args.mode == "characters"
+    if characters and args.text_file:
+        parser.error("--mode characters needs a document")
+    if args.out is None:
+        if not characters:
+            parser.error("--out is required in single mode")
+        args.out = CHARACTERS_OUT_DIR
 
     sys.stdout.reconfigure(encoding="utf-8")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -153,11 +269,26 @@ def main() -> None:
     except PipelineError as e:
         print(f"REJECTED {e.code}: {e.message}")
         sys.exit(2)
+    full_document = document
     if args.chapters:
         wanted = parse_chapters(args.chapters)
         document = document.model_copy(update={"chapters": [c for c in document.chapters if c.index in wanted]})
 
-    engine_label = args.engine or ("fallback" if get_settings().tts_fallback == "piper" else "edge")
+    settings = get_settings()
+    plan = None
+    reports: tuple[Path, Path] | None = None
+    if characters:
+        chapters, voices, cast, casting, attributed = asyncio.run(
+            attribute_document(full_document, document.chapters, settings)
+        )
+        document = document.model_copy(update={"chapters": chapters})
+        plan = plan_narration(document, settings.tts_chunk_max_chars, voices)
+        args.out.mkdir(parents=True, exist_ok=True)
+        reports = write_character_reports(
+            args.source.stem, args.out, detect_quote_family(full_document), attributed, cast, casting, settings
+        )
+
+    engine_label = args.engine or ("fallback" if settings.tts_fallback == "piper" else "edge")
     out_dir = args.out
     if args.text_file:
         out_dir = args.out / f"{args.text_file.stem}_{engine_label}"
@@ -182,7 +313,7 @@ def main() -> None:
             flush=True,
         )
 
-    result = asyncio.run(narrate_document(document, out_dir, engine, get_settings(), on_progress))
+    result = asyncio.run(narrate_document(document, out_dir, engine, settings, on_progress, plan))
     (out_dir / "manifest.json").write_text(json.dumps(result.to_dict(), indent=2), encoding="utf-8")
 
     full_path = None
@@ -204,6 +335,9 @@ def main() -> None:
     if full_path:
         print(f"full book:     {full_path} ({audio.probe(full_path).duration:.1f} s by ffprobe)")
     print(f"manifest:      {out_dir / 'manifest.json'}")
+    if reports:
+        print(f"attributed:    {reports[0]}")
+        print(f"cast:          {reports[1]}")
     if args.text_file:
         ready = [c for c in result.chapters if c.status == "ready" and c.path]
         if ready:

@@ -2,12 +2,17 @@
 
 Chunk 0 of every chapter is the spoken title. A chunk never spans two paragraphs, so the
 assembler can put the paragraph pause after the right chunk.
+
+Character voices (SPEC §15.6): given a speaker -> voice map, a chunk never mixes speakers, carries
+its own voice, quote marks are stripped, and the title stays with the narrator. Without a map
+(single narrator) chunking is exactly the v1 behaviour.
 """
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 
-from app.models import Chapter
+from app.models import Chapter, Segment
 from app.tts.normalize import normalize_for_speech, normalize_heading
 
 # Words that end with a period but almost never end a sentence.
@@ -31,6 +36,8 @@ class Chunk:
     paragraph_index: int  # 0 for the title
     ends_paragraph: bool
     is_title: bool
+    voice: str | None = None  # None: the engine's narrator voice
+    speaker_change: bool = False  # first chunk of a new speaker inside a paragraph (pause before it)
 
 
 def _is_abbreviation_or_initial(text_before: str, punct: str) -> bool:
@@ -119,13 +126,59 @@ def chunk_paragraph(text: str, max_chars: int) -> list[str]:
     return _pack(pieces, max_chars)
 
 
-def chunk_chapter(chapter: Chapter, max_chars: int) -> list[Chunk]:
-    """Title chunk first, then the paragraphs' chunks in order. Empty text is never emitted."""
+QUOTE_MARKS = "‘’'“”\""
+NARRATOR = "narrator"
+
+
+def speaker_runs(segments: list[Segment]) -> list[tuple[str, str]]:
+    """(speaker, text) for each run of consecutive segments with one speaker; quote segments lose
+    their quote marks (SPEC §15.6). Segments with nothing to say (no letter or digit, e.g. a lone
+    `(` between two quotes) are dropped, so they never become a chunk of their own."""
+    runs: list[tuple[str, list[str]]] = []
+    for s in segments:
+        text = s.text.strip().strip(QUOTE_MARKS).strip() if s.kind == "quote" else s.text.strip()
+        if not any(ch.isalnum() for ch in text):
+            continue
+        if runs and runs[-1][0] == s.speaker:
+            runs[-1][1].append(text)
+        else:
+            runs.append((s.speaker, [text]))
+    return [(speaker, " ".join(texts)) for speaker, texts in runs]
+
+
+def _chunk_by_speaker(chapter: Chapter, max_chars: int, voices: Mapping[str, str], chunks: list[Chunk]) -> None:
+    for paragraph in chapter.paragraphs:
+        pieces: list[tuple[str, str | None, bool]] = []  # text, voice, speaker change before it
+        for r, (speaker, text) in enumerate(speaker_runs(paragraph.segments)):
+            voice = None if speaker == NARRATOR else voices.get(speaker)
+            for k, piece in enumerate(chunk_paragraph(text, max_chars)):
+                pieces.append((piece, voice, k == 0 and bool(pieces) and r > 0))
+        for k, (piece, voice, change) in enumerate(pieces):
+            chunks.append(
+                Chunk(
+                    chapter.index,
+                    len(chunks),
+                    piece,
+                    paragraph.index,
+                    ends_paragraph=k == len(pieces) - 1,
+                    is_title=False,
+                    voice=voice,
+                    speaker_change=change,
+                )
+            )
+
+
+def chunk_chapter(chapter: Chapter, max_chars: int, voices: Mapping[str, str] | None = None) -> list[Chunk]:
+    """Title chunk first, then the paragraphs' chunks in order. Empty text is never emitted.
+    `voices` (speaker name -> voice id; characters mode) splits paragraphs by speaker."""
     chunks: list[Chunk] = []
     title = normalize_heading(chapter.title)
     if title:
         for piece in split_long_sentence(title, max_chars):
             chunks.append(Chunk(chapter.index, len(chunks), piece, 0, True, True))
+    if voices is not None:
+        _chunk_by_speaker(chapter, max_chars, voices, chunks)
+        return chunks
     for paragraph in chapter.paragraphs:
         text = " ".join(s.text for s in paragraph.segments)
         pieces = chunk_paragraph(text, max_chars)

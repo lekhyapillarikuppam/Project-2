@@ -62,6 +62,12 @@ _EXPLICIT_TAG = re.compile(
 _TAG_AFTER = re.compile(rf"^[\s,;:—–-]*(?:\w[\w’'-]*\s+){{0,4}}?{_VERB}", re.IGNORECASE)
 # Rule 4: a sentence that introduces the next quote (`The Hatter said, ‘…’`).
 _INTRO_TAG = re.compile(rf"{_VERB}[^.!?]*[,:—]\s*$", re.IGNORECASE)
+# Rule 4: narration between two quotes that opens with a conjunction and a newly named speaker
+# (`‘Sh!’ and the Dormouse remarked, ‘…’`) introduces the next quote: a new utterance. Named
+# subjects only: `and she added` usually continues the same speaker.
+_NEW_SPEAKER_TAG = re.compile(
+    rf"^[\s,;:—–-]*(?:and|but|while)\s+(?!(?i:{_PRONOUN})){_NAME}(?:\s+[a-z]+ly)?\s+{_VERB}"
+)
 _SENTENCE_END = re.compile(r"[.!?][’”'\")\]]*\s+")
 # Damaged closing mark inside a paragraph (extends the rule 3 exception): inside an open quote,
 # punctuation followed by a speech tag (`again! said Alice`, `don’t! the Hatter said`,
@@ -301,11 +307,12 @@ def starts_with_tag(narration: str) -> bool:
 def joins_previous(between: str, after: str) -> bool:
     """Rule 4: does a quote continue the previous quote of the same paragraph (one utterance)?
 
-    Not when the quote has its own tag right after it (`‘A,’ said Alice. ‘B,’ said the Hare.`), or
-    when the narration in between ends with a new sentence that introduces it
-    (`‘A.’ Alice nodded. The Hatter said, ‘B.’`). Otherwise yes: `‘Well,’ said Alice, ‘I suppose so.’`.
+    Not when the quote has its own tag right after it (`‘A,’ said Alice. ‘B,’ said the Hare.`), when
+    the narration in between starts with a conjunction and a newly named speaker
+    (`‘A!’ and the Dormouse remarked, ‘B.’`), or when it ends with a new sentence that introduces
+    it (`‘A.’ Alice nodded. The Hatter said, ‘B.’`). Otherwise yes: `‘Well,’ said Alice, ‘I suppose so.’`.
     """
-    if starts_with_tag(after):
+    if starts_with_tag(after) or _NEW_SPEAKER_TAG.match(between):
         return False
     sentences = _SENTENCE_END.split(between.strip())
     return not (len(sentences) > 1 and _INTRO_TAG.search(sentences[-1]))

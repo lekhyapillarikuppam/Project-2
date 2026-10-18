@@ -42,7 +42,7 @@ Locked decisions. Changing any of these needs an explicit new entry below, not a
 | D37 | Attribution runs per chapter, one chapter ahead of narration, with a token-based rate limiter; a local baseline pre-pass ranks characters so voices are fixed before narration starts | Groq's 8,000 tokens/min allows only ~2–4 windows/min; overlapping with narration hides most of the wait |
 | D38 | Labelling conventions: quoted thoughts belong to the thinker; group speech is UNKNOWN; quoted writing not spoken aloud is not an utterance; spans include quote marks; paragraphs 0-based in label files | Consistent gold labels across the three chapters |
 | D39 | The production model and combining method are chosen by a rule fixed before any attribution results: highest dev micro **voice accuracy**; ties (within 2 points) broken by fewer tokens, then lower latency, then `llm_with_baseline_override` (SPEC §15.3) | A rule fixed in advance can't be bent toward a preferred answer, and no extra review round is needed |
-| D40 | *(filled in by Phase 6.2 with the outcome of D39: model, method, scores)* | |
+| D40 | Production attribution: model `qwen/qwen3.8-27b` (`reasoning_effort: none`), method `llm` (`LLM_MODEL`, `ATTRIBUTION_METHOD` defaults). Dev micro voice accuracy: llm·qwen 0.99, llm·gpt-oss-120b 0.96, override·qwen 0.86, override·gpt-oss 0.84, baseline 0.70; no other candidate within 2 points. 2026-10-19, Phase 6.2 commit (evaluated on 95e2da6 + the Phase 6.2 changes); full table in `testset_dialogue/results.md` | Outcome of the D39 rule applied mechanically to the final dev runs |
 | D25 | A held-out test set (`testset_heldout/`) is never inspected during development; its first-run score is the honest number reported in the viva | Dev-set scores are inflated because the rules were tuned while looking at those files |
 
 ## Change log
@@ -56,4 +56,5 @@ Locked decisions. Changing any of these needs an explicit new entry below, not a
 - 2026-10-18 — v1 live (Vercel + Azure). v2 planned: D31–D36; SPEC revision 8 (§15).
 - 2026-10-18 — Phase 6.0 review: D32 revised (model chosen by evaluation), D37, D38 added; SPEC revision 9.
 - 2026-10-18 — Phase 6.1 done (Brown F1 1.00; Alice gap traced to labels). SPEC revision 10: rule 3b and 6.1 interpretations, label lint, D39 selection rule. v2 regrouped: 6.2 = attribution + cast + voices + multi-voice narration; 6.3 = jobs/API/UI, deploy, held-out run, docs.
+- 2026-10-19 — Phase 6.2 done: D40 recorded (D39 → `llm` with `qwen/qwen3.8-27b`, dev voice accuracy 0.99).
 - 2026-10-16 — Held-out first run (commit 1dbf9ac): F1 0.99 (78/79), rejects 4/4, noise 0. SPEC revision 4: compound-hyphen rule narrowed, bare-number title prefix stripped in evaluation.
