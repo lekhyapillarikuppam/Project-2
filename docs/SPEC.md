@@ -191,13 +191,13 @@ Split each paragraph into sentences, then pack sentences into chunks of ≤ 1,50
 - With `TTS_FALLBACK=none`, edge-tts is retried more patiently: up to `TTS_MAX_RETRIES` attempts (deployed: 5) with backoff 1, 2, 4, 8 s. A chunk that still fails is a **failed chunk**. The consecutive-failure counter still applies: at 5 consecutive failed chunks the narration service is considered unavailable, the current and all remaining chapters are marked `failed` with `TTS_FAILED`, and the job ends as `partial` (if any chapter is ready) or `failed`.
 - Piper settings (used only when `TTS_FALLBACK=piper`): `PIPER_DISABLE_ARENA=true`, `PIPER_MAX_CHARS=300`, model `en_US-lessac-low` or `-medium`.
 
-### 6.8 Assembly (`tts/assemble.py`)
+### 6.8 Assembly (`tts/audio.py`, `tts/narrator.py`)
 - All audio uses the same MP3 parameters, so files can be joined with the ffmpeg concat demuxer and `-c copy` (no re-encoding).
 - The concat list file uses absolute paths written with forward slashes, each single-quoted with any `'` escaped as `'\''`, and ffmpeg is run with `-f concat -safe 0`. This works with Windows paths that contain backslashes or spaces.
 - Pre-generated silence clips in the same format: 400 ms between paragraphs, 1,000 ms after the chapter title, 2,000 ms between chapters in the full book.
 - Each chapter file starts with the narrator reading the chapter title.
 - **No silent gaps**: if any chunk of a chapter fails on every available engine, the whole chapter is `failed` (its partial audio is discarded). A listener must never get a chapter with missing text.
-- Chapter duration = the sum of the durations of its parts (each chunk and silence clip measured with ffprobe before joining). After joining, ffprobe also reads the joined file; if the two differ by more than 1 s, a warning is logged and the summed value is used. This avoids wrong durations from MP3 header information copied from the first part.
+- Chapter duration = the sum of the durations of its parts (each chunk and silence clip measured before joining from its MP3 frame headers, with ffprobe only when a file cannot be parsed). After joining, ffprobe also reads the joined file; if the two differ by more than 1 s, a warning is logged and the summed value is used. This avoids wrong durations from MP3 header information copied from the first part.
 - `full.mp3` is built on the first full-book download request (after all chapters are ready) and cached in the job folder.
 
 ## 7. Data model
