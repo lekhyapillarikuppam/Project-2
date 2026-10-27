@@ -13,8 +13,8 @@ voice while the narrator reads the rest.
 
 UMC301 Applied Data Science and Artificial Intelligence — Project 2.
 
-**Live:** <https://project-2-eight-azure.vercel.app> · sample audiobook: <https://project-2-eight-azure.vercel.app/sample> ·
-character-voices sample: <https://project-2-eight-azure.vercel.app/sample/characters> ·
+**Live:** <https://audiobook-generator-lekhya.vercel.app> · sample audiobook: <https://audiobook-generator-lekhya.vercel.app/sample> ·
+character-voices sample: <https://audiobook-generator-lekhya.vercel.app/sample/characters> ·
 backend health: <https://lekhya-audiobook.centralindia.cloudapp.azure.com/api/health>
 
 ![Readaloud playing the sample audiobook](docs/screenshots/desktop-light-sample.png)

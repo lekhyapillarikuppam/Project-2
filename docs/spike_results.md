@@ -131,3 +131,9 @@ should stay near the *Alice* figures.
 - **Local full-book measurement** (Phase 6.3, same code, real Groq): *Alice* in characters mode
   through the API in 12 min 21 s, chapter 1 playable after 1 min, 27 windows with 0 baseline
   fallbacks and 4 short 429 waits (4–12 s), peak process RSS 115 MB.
+
+## Frontend URL (2026-10-27)
+
+- The frontend is now served at <https://audiobook-generator-lekhya.vercel.app>. The URL used in the
+  checks above, <https://project-2-eight-azure.vercel.app>, still works; both are in the backend's
+  `CORS_ORIGINS`.

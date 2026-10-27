@@ -1,7 +1,7 @@
 # Viva preparation — Readaloud (AI-Powered Audiobook Generator)
 
-Live site: <https://project-2-eight-azure.vercel.app> · sample: <https://project-2-eight-azure.vercel.app/sample> ·
-character-voices sample: <https://project-2-eight-azure.vercel.app/sample/characters> ·
+Live site: <https://audiobook-generator-lekhya.vercel.app> · sample: <https://audiobook-generator-lekhya.vercel.app/sample> ·
+character-voices sample: <https://audiobook-generator-lekhya.vercel.app/sample/characters> ·
 backend health: https://lekhya-audiobook.centralindia.cloudapp.azure.com/api/health
 
 ---
@@ -358,7 +358,7 @@ results (D39).
 
 | Time | Do | Say |
 |---|---|---|
-| 0:00 | Open <https://project-2-eight-azure.vercel.app> | "Readaloud turns PDFs and Word files into chaptered audiobooks." |
+| 0:00 | Open <https://audiobook-generator-lekhya.vercel.app> | "Readaloud turns PDFs and Word files into chaptered audiobooks." |
 | 0:15 | Click **Try a sample**, press play | "This is a pre-made sample, served as static files, so it works even without the backend." |
 | 0:35 | Back to the start page; upload `01_novel.pdf` (Alice) | "The server checks the file, extracts the text with its layout, cleans it and finds the chapters." |
 | 0:55 | Show the progress panel and the chapter list | "Chapters are narrated in order. Chapter 1 is ready after about 10 seconds." |
