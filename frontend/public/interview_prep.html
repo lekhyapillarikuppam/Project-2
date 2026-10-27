@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Viva Prep Transcript</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--ink:#1d1d1b;--dim:#6b6b66;--line:#e2e1dc;--accent:#2f5d8a;--user:#eef3f8;--code:#fbfbfa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161615;--card:#1f1f1d;--ink:#e9e8e3;--dim:#9a9993;--line:#34332f;--accent:#8db4dc;--user:#1e2a36;--code:#181817}}
+:root[data-theme="dark"]{--bg:#161615;--card:#1f1f1d;--ink:#e9e8e3;--dim:#9a9993;--line:#34332f;--accent:#8db4dc;--user:#1e2a36;--code:#181817}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header.top{padding:28px 16px 12px;max-width:1100px;margin:0 auto}
+h1{margin:0 0 6px;font-size:1.6rem}
+.lede{color:var(--dim);margin:0 0 12px;max-width:75ch}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;font-size:.9rem;padding:6px 12px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+.wrap{max-width:1100px;margin:0 auto;padding:0 16px 60px;display:grid;grid-template-columns:260px minmax(0,1fr);gap:24px}
+nav{position:sticky;top:12px;align-self:start;max-height:calc(100vh - 24px);overflow:auto;font-size:.85rem;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:10px}
+nav ol{list-style:none;margin:0;padding:0}
+nav li a{display:block;padding:5px 6px;color:var(--ink);text-decoration:none;border-radius:4px}
+nav li a:hover{background:var(--user)}
+nav b{color:var(--accent)}
+main{min-width:0}
+.turn{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:0 0 14px;scroll-margin-top:12px}
+.turn h2{margin:0 0 8px;font-size:1.1rem;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.turn h2 a{color:var(--ink);text-decoration:none}
+.label{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);font-weight:600;margin-bottom:4px}
+pre{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace;font-size:12.5px;line-height:1.45;margin:0;border-radius:6px}
+pre.user{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--user);padding:10px 12px;font-size:13px}
+pre.resp{white-space:pre;overflow-x:auto;background:var(--code);border:1px solid var(--line);padding:10px 12px;margin-top:8px}
+details{margin-top:10px}
+summary{cursor:pointer;font-weight:600;color:var(--accent);padding:4px 0}
+.dim,.meta{color:var(--dim);font-weight:400}
+.meta{font-size:.8rem}
+@media (max-width:800px){.wrap{grid-template-columns:1fr}nav{position:static;max-height:none}}
+</style>
+</head>
+<body>
+<header class="top">
+<h1>Viva Prep Transcript</h1>
+<p class="lede">Readaloud (UMC301 Project 2): Claude Code session preparing for the viva. 5 turns; click a response to expand it.</p>
+<div class="toolbar"><button type="button" id="expand">Expand all</button><button type="button" id="collapse">Collapse all</button></div>
+</header>
+<div class="wrap">
+<nav aria-label="Turns"><ol>
+<li><a href="#turn-1"><b>Turn 1</b> /init</a></li>
+<li><a href="#turn-2"><b>Turn 2</b> now help me prepare for my project 2 viva. firs…</a></li>
+<li><a href="#turn-3"><b>Turn 3</b> tell me more about v2 [with character voice] ho…</a></li>
+<li><a href="#turn-4"><b>Turn 4</b> now explain to me the code flow from when i upl…</a></li>
+<li><a href="#turn-5"><b>Turn 5</b> how is the text extracted from uploaded document</a></li>
+</ol></nav>
+<main>
+<section class="turn" id="turn-1">
+<h2><a href="#turn-1">Turn 1</a><span class="meta">Sautéed for 28s · done 4:48 PM</span></h2>
+<div class="label">You</div>
+<pre class="user">/init</pre>
+<details>
+<summary>Response <span class="dim">· CLAUDE.md already existed and was in good shape, so I checked it agai… · 53 lines</span></summary>
+<pre class="resp">● A CLAUDE.md already exists, so I&#x27;ll check it against the repo and look for
+  anything wrong or missing.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● CLAUDE.md checks out—everything it references exists—but it&#x27;s missing three
+  backend scripts, including the one that generates the static sample the
+  frontend serves. I&#x27;ll add those now.
+
+● Update(C:\dev\Project2\CLAUDE.md)
+  ⎿  Added 2 lines
+      32  - Chapter-detection evaluation: `cd backend; python scripts\eva
+          luate.py` (held-out: `--testset ..\testset_heldout --history`)
+      33  - Dialogue/speaker evaluation: `cd backend; python scripts\eval
+          uate_dialogue.py --methods all --models qwen/qwen3.8-27b,openai
+          /gpt-oss-120b` (Groq answers cached in `storage/llm_cache`, so
+          re-scoring is free)
+      34  - Debug one stage by hand: `scripts\extract.py` (pipeline only
+          → document JSON), `scripts\narrate.py` (TTS only), `scripts\smo
+          ke_api.py` (end-to-end against a running server)
+      35 +- Regenerate the static sample in `frontend/public/sample/` (D2
+         +2): `cd backend; python scripts\make_sample.py` (calls edge-tts
+         +)
+      36 +- Dialogue gold labels (SPEC §15.9): `scripts\extract_dialogue_
+         +chapter.py` writes a chapter to `testset_dialogue/text/`, then
+         +`scripts\label_dialogue.py &lt;text json&gt;` opens a local labelling
+         + UI that saves to `testset_dialogue/labels/`
+      37  - Deploy: backend via `deploy/README.md` (`bash deploy.sh` on t
+          he Azure VM); frontend on Vercel (root `frontend`, `VITE_API_UR
+          L`).
+      38
+      39  ## Architecture
+
+● CLAUDE.md already existed and was in good shape, so I checked it against the
+  repo and made one small addition instead of rewriting it.
+
+  Checked and correct: every command and file it mentions exists. That includes
+  the frontend scripts in package.json, the .env.development, .env.remote and
+  .env.production modes, the test file paths, create_app in app/main.py,
+  GateEngine in tests/conftest.py, the app/dialogue/ modules, and the files in
+  deploy/.
+
+  Added to Commands: three backend scripts that weren&#x27;t listed:
+  - scripts\make_sample.py rebuilds the static sample audiobook in
+    frontend/public/sample/. It calls edge-tts, so it needs network access.
+  - scripts\extract_dialogue_chapter.py writes one chapter out as a text file
+    for dialogue evaluation.
+  - scripts\label_dialogue.py opens a local tool for labelling who speaks each
+    line, which is how the dialogue answer key gets made.
+
+  Nothing else needed: there are no Cursor, Copilot, Codex or Gemini configs to
+  fold in. The README&#x27;s important points (stack, deployment, limits) are already
+  covered or point to docs/SPEC.md.</pre>
+</details>
+</section>
+<section class="turn" id="turn-2">
+<h2><a href="#turn-2">Turn 2</a><span class="meta">Baked for 40s · done 4:50 PM</span></h2>
+<div class="label">You</div>
+<pre class="user">now help me prepare for my project 2 viva. first explain how the whole
+project works from start to end in simple terms, what each part does and
+which technologies we used. explain based on our actual code. don&#x27;t make it
+too complicated at once, i&#x27;ll ask doubts as we go.</pre>
+<details>
+<summary>Response <span class="dim">· How Readaloud works, from start to end · 188 lines</span></summary>
+<pre class="resp">  Ran 3 shell commands (ctrl+o to expand)
+
+● Correction: CLAUDE.md lists the upload endpoint as POST /api/jobs, but the
+  actual code at app/api/routes.py:172 uses POST /api/upload. I&#x27;ll fix that line
+  now so it doesn&#x27;t trip you up in the viva.
+
+● Update(C:\dev\Project2\CLAUDE.md)
+  ⎿  Added 1 line, removed 1 line
+      37  - Deploy: backend via `deploy/README.md` (`bash deploy.sh` on t
+          he Azure VM); frontend on Vercel (root `frontend`, `VITE_API_UR
+          L`).
+      38
+      39  ## Architecture
+      40 -**Request flow.** `app/main.py:create_app()` builds the FastAPI
+         - app and stores everything shared on `app.state` (settings, `Jo
+         -bRegistry`, engine factory, LLM factory, upload rate limiter).
+         -The lifespan hook wipes `storage/jobs/` (D18), then starts one
+         -`JobWorker` thread and one `CleanupThread`. `POST /api/jobs` (i
+         -n `app/api/routes.py`) saves the upload, registers a job, and h
+         -ands the id to the worker; the frontend polls the job and strea
+         -ms chapter MP3s with HTTP Range (`app/api/files.py`).
+      40 +**Request flow.** `app/main.py:create_app()` builds the FastAPI
+         + app and stores everything shared on `app.state` (settings, `Jo
+         +bRegistry`, engine factory, LLM factory, upload rate limiter).
+         +The lifespan hook wipes `storage/jobs/` (D18), then starts one
+         +`JobWorker` thread and one `CleanupThread`. `POST /api/upload`
+         +(in `app/api/routes.py`) saves the upload, registers a job, and
+         + hands the id to the worker; the frontend polls the job and str
+         +eams chapter MP3s with HTTP Range (`app/api/files.py`).
+      41
+      42  **Threading model (D20).** The worker is one daemon thread with
+           a FIFO queue; each job runs end to end inside its own `asyncio
+          .run`. Blocking steps go through `asyncio.to_thread`; ffmpeg is
+           called only via `subprocess.run` (Windows asyncio subprocess i
+          ssues). Job state lives only in `app/jobs/registry.py` and is c
+          hanged via `registry.update(job_id, change_fn)` under its lock,
+           which also writes `job.json`. This is the only place mutable g
+          lobal state is allowed.
+      43
+
+● How Readaloud works, from start to end
+
+  In one sentence: you upload a PDF or Word file, the backend works out the
+  chapters, cleans the text, turns each chapter into an MP3 with a neural voice,
+  and the browser starts playing chapter 1 while the rest are still being made.
+
+  There are two halves:
+  - Frontend: a React website, hosted on Vercel.
+  - Backend: a Python FastAPI server, running on an Azure VM.
+
+  ---
+
+  Step 1: Upload (frontend → backend)
+
+  - The user picks a file on the upload page (frontend/src/pages/) and sends it
+    to POST /api/upload (app/api/routes.py).
+  - The backend saves the file and creates a job with an id.
+  - It puts the job in a queue and replies straight away (HTTP 202, &quot;accepted&quot;).
+    It doesn&#x27;t make the user wait.
+  - Rate limit: 10 uploads per IP per hour (app/api/ratelimit.py).
+
+  Tech: FastAPI, uvicorn (the web server), python-multipart (file uploads).
+
+  Step 2: The job worker (one at a time)
+
+  - One background thread, JobWorker in app/jobs/worker.py, takes jobs from the
+    queue one by one.
+  - Settings in config.py: 1 job active and up to 3 waiting.
+  - Each job&#x27;s state (queued → processing → narrating → done) lives in
+    app/jobs/registry.py and is also saved to job.json.
+
+  Why one at a time: the server is a small free student VM. Running one job at a
+  time keeps memory use low (about 130 MB).
+
+  Step 3: The document pipeline (app/pipeline/, run_pipeline)
+
+  This is the &quot;understand the document&quot; part. It runs in four stages:
+
+  1. Validate (validate.py): is it really a PDF or DOCX (checked by the file&#x27;s
+     signature, not just its name)? Is it under 50 MB, 200 pages and 100k words?
+     Is it encrypted or a scanned image? Bad files are rejected with a clear
+     error code.
+  2. Extract (extract_pdf.py with PyMuPDF, extract_docx.py with python-docx):
+     reads every line of text along with its font size, boldness and position on
+     the page. It handles two-column pages.
+  3. Clean (clean.py): removes things that shouldn&#x27;t be read aloud, such as page
+     numbers, headers and footers repeated on every page, captions, footnotes,
+     tables and equations. It also rejoins words split by hyphens at line ends
+     (&quot;narra-&quot; + &quot;tion&quot;).
+  4. Structure (structure.py, detect_structure): finds the chapters. It tries
+     one strategy after another, best first:
+     - the PDF&#x27;s built-in outline (bookmarks)
+     - Word heading styles
+     - typography: bigger or bold text that looks like a heading
+     - text patterns such as &quot;Chapter IV&quot;
+     - a fallback that splits the text into equal parts
+
+     It also drops the contents page and back matter (references, index), merges
+     very small chapters and splits very large ones.
+
+  The result is a DocumentModel (app/models.py): a list of chapters, each
+  holding clean text.
+
+  Step 4: Text-to-speech (app/tts/)
+
+  1. Normalize (normalize.py, uses num2words): rewrites text so it can be
+     spoken, e.g. &quot;1984&quot; → &quot;nineteen eighty-four&quot;, &quot;Dr.&quot; → &quot;Doctor&quot;, &quot;%&quot; →
+     &quot;percent&quot;.
+  2. Chunk (chunk.py): splits each chapter into pieces of up to 1,500
+     characters, breaking only between sentences.
+  3. Engines (engines.py): the actual voice.
+     - edge-tts is the main one. It uses Microsoft&#x27;s free neural voices; the
+       default is en-US-AriaNeural.
+     - Piper is a local neural voice model, used only on your laptop. The server
+       runs edge-tts only.
+  4. Narrator (narrator.py): narrates 4 chunks at once, retrying up to 3 times.
+     If a chunk still fails, that whole chapter is marked failed rather than
+     silently skipping text.
+  5. Audio (audio.py, uses ffmpeg): joins the chunk MP3s and short silences into
+     one MP3 per chapter without re-encoding, so it&#x27;s fast. It can also build
+     full.mp3 for the whole book.
+
+  Chapters are narrated in order, and each one becomes playable as soon as it&#x27;s
+  ready. That&#x27;s why you can listen to chapter 1 within seconds.
+
+  Step 5: Listening (backend → frontend)
+
+  - The frontend checks the job every few seconds (GET /api/jobs/{id}, in
+    hooks/useJobPolling.js) to see which chapters are ready.
+  - The player (hooks/useAudioPlayer.js) streams chapter audio from
+    /api/jobs/{id}/chapters/{n}/audio. It uses HTTP Range requests
+    (app/api/files.py), so you can seek without downloading the whole file.
+  - Speed (0.5×–2×) is changed in the browser, not on the server.
+  - Download links: /download/{n} for one chapter and /download/full for the
+    whole book.
+  - A cleanup thread (app/jobs/cleanup.py) deletes everything after 24 hours.
+
+  Step 6 (v2, optional): Character voices (app/dialogue/)
+
+  This runs only if the user picks &quot;Character voices&quot;:
+  1. Segment (segment.py): finds the quoted speech in each paragraph.
+  2. Attribute (attribute.py, llm.py): asks an LLM (Groq, model
+     qwen/qwen3.8-27b, called over httpx) who says each quote, about 1,200 words
+     at a time. If the LLM fails or runs out of its free daily budget,
+     hand-written rules take over: &quot;said Alice&quot;, pronouns, and speakers taking
+     turns. The LLM can never make a job fail.
+  3. Cast (cast.py, uses rapidfuzz): merges different names for the same
+     character (&quot;Hatter&quot; = &quot;the Mad Hatter&quot;).
+  4. Voices (voices.py, voice_pool.json): gives up to 8 main characters their
+     own edge-tts voice. Minor characters share one voice per gender.
+
+  While chapter N is being narrated, the LLM is already working on chapter N+1,
+  so there&#x27;s no extra waiting.
+
+  ---
+
+  Tech summary
+
+  ┌────────────────┬────────────────────────────────────────────────────────┐
+  │      Part      │                       Technology                       │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ Frontend       │ React 19, react-router-dom, Vite, plain CSS; tests     │
+  │                │ with Vitest                                            │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ Backend API    │ Python, FastAPI, uvicorn, pydantic-settings (config)   │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ Reading        │ PyMuPDF (PDF), python-docx (Word)                      │
+  │ documents      │                                                        │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ Speech         │ edge-tts (neural voices), Piper (local), num2words,    │
+  │                │ ffmpeg                                                 │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ Character      │ Groq LLM via httpx, rapidfuzz                          │
+  │ voices         │                                                        │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ Testing        │ pytest (backend), Vitest (frontend)                    │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ Hosting        │ Vercel (frontend), Azure VM with Docker + Caddy for    │
+  │                │ HTTPS (backend)                                        │
+  └────────────────┴────────────────────────────────────────────────────────┘
+
+  Results to remember: chapter detection scored 0.99 F1 on a held-out test set
+  the first time it was run. For character voices, 0.83 of lines on the held-out
+  chapter were read in the right voice, against 0.48 for the rules alone.
+
+  Ask about any step you&#x27;d like to go deeper on. Good ones to have ready are why
+  we used rules instead of ML for chapters, why one job at a time, and how the
+  evaluation was kept honest.</pre>
+</details>
+</section>
+<section class="turn" id="turn-3">
+<h2><a href="#turn-3">Turn 3</a><span class="meta">Cogitated for 45s · done 4:56 PM</span></h2>
+<div class="label">You</div>
+<pre class="user">tell me more about v2 [with character voice] how it works and how the voices
+are selected</pre>
+<details>
+<summary>Response <span class="dim">· v2: Character voices · 196 lines</span></summary>
+<pre class="resp">  Ran 4 shell commands (ctrl+o to expand)
+
+● v2: Character voices
+
+  The user picks &quot;Character voices (beta)&quot; on the upload page. That option only
+  appears if the server has a Groq API key (GROQ_API_KEY).
+
+  The normal v1 pipeline still runs first: validate, extract, clean, find
+  chapters. v2 adds four steps on top, in app/dialogue/:
+
+  chapter text → 1. find quotes → 2. who said it? → 3. merge names into a cast →
+  4. pick voices → narrate
+                 segment.py       attribute.py        cast.py
+  voices.py
+                                  (+ llm.py, windows.py)
+
+  ---
+
+  1. Finding the dialogue (segment.py)
+
+  Each paragraph is split into narration and quote pieces. This is harder than
+  it sounds:
+
+  - Which quote marks does the book use? It counts double marks (“ ”) and single
+    marks (‘ ’) per 1,000 words and picks the more common family. Alice in
+    Wonderland uses single quotes. If there are fewer than 2 marks per 1,000
+    words, the book is treated as having no dialogue.
+  - Apostrophes aren&#x27;t quotes. In books with single quotes, don&#x27;t, &#x27;tis and
+    talkin&#x27; must not count as quote marks. The code has lists of these
+    (LEADING_ELISIONS, TRAILING_ELISIONS).
+  - Broken quotes count as one line. In ‘Well,’ said Alice, ‘I suppose so.’ both
+    pieces are the same utterance, so they share one id and one speaker.
+  - Quotes that span paragraphs. A long speech can continue into the next
+    paragraph, which then starts with a new opening mark.
+
+  The output is a list of utterances with ids (U1, U2, …).
+
+  2. Who said it? (attribute.py)
+
+  The code has two ways to answer this.
+
+  a) The LLM (main method)
+
+  - The chapter is cut into windows of about 1,200 words (windows.py). A window
+    never cuts a quote in half. The 2 paragraphs before the window are added as
+    read-only context.
+  - Each quote in the window gets a tag like [Q3]‘…’.
+  - One request per window goes to Groq, model qwen/qwen3.8-27b, with
+    temperature 0 (most predictable answers) and JSON mode.
+  - The request also includes the list of characters found so far, with their
+    genders, so names stay consistent across windows.
+  - The prompt (SYSTEM_PROMPT in attribute.py) tells the model to give a speaker
+    for every id, mark speech by a group (&quot;they cried&quot;) as UNKNOWN, not guess,
+    and list new characters with their gender. Example reply:
+  {&quot;q&quot;:{&quot;Q1&quot;:&quot;Alice&quot;,&quot;Q2&quot;:&quot;UNKNOWN&quot;},&quot;new&quot;:[{&quot;name&quot;:&quot;Dormouse&quot;,&quot;gender&quot;:&quot;male&quot;,&quot;
+  aliases&quot;:[]}]}
+  - The answer is checked. If it&#x27;s bad, the request is retried once; if it fails
+    again, that window uses the rules instead.
+
+  b) The rule-based baseline (fallback)
+
+  1. Explicit tags: said Alice, the Hatter replied.
+  2. Pronoun tags: for she said, if only one named female character appears in
+     the last 3 paragraphs, it&#x27;s her.
+  3. Turn-taking: in back-and-forth dialogue, speakers alternate A, B, A, B.
+  4. Otherwise UNKNOWN.
+
+  Key design rule (D34): the LLM can never make a job fail. Problems such as a
+  timeout, bad JSON or running out of the free budget only make that window fall
+  back to the rules. The book page shows a note on chapters where this
+  happened.
+
+  Staying inside Groq&#x27;s free limits (D42): llm.py tracks how many tokens were
+  used in the last 60 seconds and keeps under 7,000 per minute (Groq allows
+  8,000). It also caps requests at 800 a day. If it would have to wait too long,
+  it falls back to the rules.
+
+  3. Building the cast (cast.py)
+
+  The LLM might say &quot;Hatter&quot; in one window and &quot;the Mad Hatter&quot; in another.
+  These have to become one character.
+  - Names are normalized first: &quot;the&quot;, titles like &quot;Mr.&quot; and punctuation are
+    removed, and everything is lowercased. &quot;the Mad Hatter&quot; becomes mad hatter.
+  - Two names are merged if:
+    - the LLM said one is an alias of the other, or
+    - rapidfuzz finds them at least 90% similar, or
+    - one name&#x27;s words are inside the other&#x27;s (hatter ⊂ mad hatter)
+
+    …and only if their genders don&#x27;t conflict.
+  - Gender comes from the LLM, or from counting he/she in the 200 characters
+    after the character&#x27;s speech tags.
+
+  4. How the voices are picked (voices.py + voice_pool.json)
+
+  The voice pool
+
+  - voice_pool.json lists 24 edge-tts voices: 12 female and 12 male.
+  - The narrator, en-US-AriaNeural, is always removed from the pools, so a
+    character can never sound like the narrator.
+  - The voices are ordered so that neighbours have different accents (British,
+    American, Australian, Irish, …). The first few characters to be cast
+    therefore sound clearly different.
+  - The last voice in each pool is the &quot;minor&quot; voice, shared by all small
+    characters of that gender: en-US-MichelleNeural (female) and
+    en-US-EricNeural (male). It&#x27;s never given to a main character.
+
+  The rules
+
+  max_cast = 8 means at most 8 characters get their own voice.
+
+  Step A: reserve voices up front. Before narration starts, the fast rule-based
+  pass reads the whole book. Any name that:
+  - starts with a capital letter (so &quot;the girl&quot; doesn&#x27;t count), and
+  - has at least 3 explicitly tagged lines (&quot;said X&quot;)
+
+  gets a voice slot reserved. At most 6 are reserved (8 − 2), so 2 slots stay
+  free for characters who turn up later.
+
+  Step B: assign voices chapter by chapter, just before narration (D41, &quot;lazy
+  casting&quot;). For each speaker in the chapter, starting with whoever has the most
+  lines:
+
+  ┌─────────────────────────────────────────┬───────────────────────────────┐
+  │              Character is…              │             Gets              │
+  ├─────────────────────────────────────────┼───────────────────────────────┤
+  │ Already given a voice earlier           │ The same voice (voices never  │
+  │                                         │ change)                       │
+  ├─────────────────────────────────────────┼───────────────────────────────┤
+  │ Reserved                                │ The next free distinct voice  │
+  │                                         │ from their gender&#x27;s pool      │
+  ├─────────────────────────────────────────┼───────────────────────────────┤
+  │ Not reserved, but has 2 or more lines   │ The next free distinct voice  │
+  │ in this chapter and a slot is left      │                               │
+  ├─────────────────────────────────────────┼───────────────────────────────┤
+  │ Anyone else (minor character)           │ The shared minor voice for    │
+  │                                         │ their gender                  │
+  ├─────────────────────────────────────────┼───────────────────────────────┤
+  │ Gender unknown                          │ Whichever pool has more free  │
+  │                                         │ voices                        │
+  ├─────────────────────────────────────────┼───────────────────────────────┤
+  │ UNKNOWN speaker                         │ The narrator reads it         │
+  └─────────────────────────────────────────┴───────────────────────────────┘
+
+  Why lazy? Gender and names are only reliable once the LLM has read that
+  chapter. Assigning voices only at that point avoids giving someone a
+  wrong-gender voice early on.
+
+  Why reserve? Without reservations, a few minor characters in chapter 1 could
+  use up all 8 voices before a main character such as the Hatter appears.
+
+  5. Narration with several voices
+
+  - Each piece of text is narrated with its speaker&#x27;s voice: the narrator for
+    narration, the character&#x27;s voice for quotes.
+  - Quote marks are never read aloud, and chapter titles are always read by the
+    narrator.
+  - There&#x27;s a 150 ms pause between different speakers in the same paragraph
+    (SPEAKER_PAUSE_MS in audio.py), so voice changes don&#x27;t sound abrupt.
+
+  6. Speed: working ahead (D37)
+
+  CharactersMode in app/jobs/worker.py runs the LLM on chapter N+1 while chapter
+  N is being narrated. The user still gets chapter 1 quickly. The frontend
+  shows progress like &quot;Finding the characters… (window 3 of 12)&quot; and a Cast list
+  showing each character&#x27;s voice.
+
+  ---
+
+  Results to remember
+
+  ┌──────────────────────────────────────────┬───────────┬─────────────────┐
+  │                                          │  Rules    │    LLM (our     │
+  │                                          │   only    │     choice)     │
+  ├──────────────────────────────────────────┼───────────┼─────────────────┤
+  │ Voice accuracy, dev chapters             │ 0.71      │ 0.99            │
+  ├──────────────────────────────────────────┼───────────┼─────────────────┤
+  │ Voice accuracy, held-out chapter (run    │ 0.48      │ 0.83            │
+  │ once)                                    │           │                 │
+  └──────────────────────────────────────────┴───────────┴─────────────────┘
+
+  Quote detection F1 was 0.99 on both. The model (qwen vs gpt-oss-120b) and the
+  method were chosen by a rule written down before seeing any results (D39). The
+  default is plain llm (D40), set in config.py as attribution_method.
+
+  Likely viva questions:
+  - Why use an LLM here when chapter detection uses rules? Speaker attribution
+    needs to understand the story; for example, implicit speakers in turn-taking
+    dialogue.
+  - What happens if Groq is down? The rules take over and the job still
+    finishes.
+  - Why do minor characters share a voice? There are only 24 voices, and too
+    many different voices would confuse the listener.
+  - Why is UNKNOWN read by the narrator? A wrong character voice is worse than a
+    neutral one.
+
+  Ask about any part you&#x27;d like to go deeper on.</pre>
+</details>
+</section>
+<section class="turn" id="turn-4">
+<h2><a href="#turn-4">Turn 4</a><span class="meta">Cooked for 43s · done 5:50 PM</span></h2>
+<div class="label">You</div>
+<pre class="user">now explain to me the code flow from when i upload a file to until the
+audiofile is ready
+tell me the order of things done</pre>
+<details>
+<summary>Response <span class="dim">· Code flow: from upload to ready audio · 185 lines</span></summary>
+<pre class="resp">  Ran 4 shell commands (ctrl+o to expand)
+
+● Code flow: from upload to ready audio
+
+  Job status goes through these stages, and the frontend shows each one:
+
+  queued → extracting → (attributing, character mode only) → synthesizing → done
+  / partial / failed
+
+  ---
+
+  Part A: The upload request (fast, a few seconds)
+
+  1. Browser sends the file
+  frontend/src/api/client.js → uploadFile()
+  - Sends POST /api/upload with the file and narration_mode (single or
+    characters).
+  - Uses XMLHttpRequest rather than fetch, because only XMLHttpRequest can
+    report upload progress for the progress bar.
+
+  2. Backend receives it
+  backend/app/api/routes.py → upload(). It runs these checks in order:
+  1. Rate limit: at most 10 uploads per IP per hour (ratelimit.py). This is
+     checked before the file is even read.
+  2. Size check from the header: if Content-Length is over 50 MB, the request is
+     rejected without reading the body.
+  3. Server busy? registry.has_capacity() allows 1 running job and 3 queued.
+  4. Creates a job id (uuid4) and a folder storage/jobs/&lt;job_id&gt;/.
+  5. Saves the file to that folder (_receive_upload).
+  6. Checks narration_mode. Character mode is refused if there&#x27;s no Groq key.
+  7. Quick validation: validate_file() checks the file type, signature, page
+     count, encryption and scanned pages, so bad files are rejected straight
+     away with a clear error.
+  8. Creates a Job object (with an expiry time of now + 24 h) and adds it to the
+     registry.
+  9. worker.submit(job_id) puts the job in the queue.
+  10. Replies 202 {&quot;job_id&quot;: ..., &quot;status&quot;: &quot;queued&quot;}.
+
+  If anything fails, the job folder is deleted (shutil.rmtree), so rejected
+  uploads leave nothing behind.
+
+  3. Browser goes to the book page
+  It navigates to /book/&lt;job_id&gt; and starts polling GET /api/jobs/&lt;job_id&gt; every
+  3 seconds (hooks/useJobPolling.js).
+
+  ---
+
+  Part B: The background worker (where the real work happens)
+
+  4. Worker picks up the job
+  backend/app/jobs/worker.py → JobWorker._loop()
+  - One background thread takes job ids from the queue, one at a time.
+  - Each job runs inside asyncio.run(self.run_job(job_id)), which calls
+    _run_job().
+
+  5. Status → extracting, run the pipeline
+  _run_job() calls run_pipeline() from app/pipeline/__init__.py (inside
+  asyncio.to_thread, because it&#x27;s slow, blocking work). Inside it, in order:
+  1. validate_file() runs again (it was already checked in step 2; this also
+     finds pages to skip).
+  2. Extract: extract_pdf() (PyMuPDF) or extract_docx() (python-docx) returns
+     lines with font size, boldness and position.
+  3. Clean: clean_lines() removes headers, footers, page numbers, captions and
+     footnotes, and fixes hyphenation.
+  4. Structure: detect_structure() finds chapters (outline → styles → typography
+     → patterns → fallback).
+  5. Checks the total word count (too many words, or empty document).
+  6. Returns a DocumentModel: a list of chapters with clean text.
+
+  If this fails, PipelineError is raised, _fail() marks the job failed with an
+  error code, and processing stops.
+
+  6. Save and plan
+  - The document is written to document.json in the job folder.
+  - plan_narration() (app/tts/narrator.py) runs, for each chapter, normalize
+    (numbers and abbreviations become words) and then chunk (≤ 1,500 characters,
+    split at sentence ends).
+  - start_synthesis() updates the job: the chapter list (all pending), the total
+    character count, and status synthesizing (or attributing in character
+    mode).
+
+  From this point, the frontend can show the list of chapters.
+
+  7. Narrate the chapters, strictly in order
+  narrate_document() in narrator.py loops over chapters 1, 2, 3, …
+
+  Character mode only: before each chapter, CharactersMode.prepare() gets the
+  speakers (from the LLM or the rules), assigns voices, and re-chunks the
+  chapter so each chunk has a voice. It also starts the LLM on the next chapter
+  in the background.
+
+  For each chapter, _narrate_chapter() does:
+
+  ┌──────┬───────────────────────┬──────────────────────────────────────────┐
+  │ Step │         Code          │               What happens               │
+  ├──────┼───────────────────────┼──────────────────────────────────────────┤
+  │ a    │ emits chapter_started │ chapter status becomes generating        │
+  ├──────┼───────────────────────┼──────────────────────────────────────────┤
+  │      │                       │ sends chunks to edge-tts, 4 at a time    │
+  │ b    │ _synthesize_chunks()  │ (asyncio.Semaphore(4)). Each chunk is    │
+  │      │                       │ saved as work/ch_001/0001.mp3, 0002.mp3, │
+  │      │                       │  …                                       │
+  ├──────┼───────────────────────┼──────────────────────────────────────────┤
+  │ c    │ FallbackEngine        │ a failed chunk is retried up to 3 times  │
+  │      │ (engines.py)          │ with increasing waits between tries      │
+  ├──────┼───────────────────────┼──────────────────────────────────────────┤
+  │      │                       │ builds the order: chunk, pause, chunk, … │
+  │ d    │ _assemble_chapter()   │  (title pause, paragraph pause, and 150  │
+  │      │                       │ ms between speakers)                     │
+  ├──────┼───────────────────────┼──────────────────────────────────────────┤
+  │ e    │ audio.concat()        │ ffmpeg joins everything without          │
+  │      │                       │ re-encoding into chapters/ch_001.mp3     │
+  ├──────┼───────────────────────┼──────────────────────────────────────────┤
+  │      │                       │ adds up the part lengths read from MP3   │
+  │ f    │ duration              │ frame headers, and checks once with      │
+  │      │                       │ ffprobe                                  │
+  ├──────┼───────────────────────┼──────────────────────────────────────────┤
+  │ g    │ emits chapter_ready   │ chapter status becomes ready and its     │
+  │      │                       │ path and duration are saved              │
+  ├──────┼───────────────────────┼──────────────────────────────────────────┤
+  │ h    │ cleanup               │ the work/ folder for that chapter is     │
+  │      │                       │ deleted                                  │
+  └──────┴───────────────────────┴──────────────────────────────────────────┘
+
+  If any chunk still fails after all retries, the whole chapter is marked failed
+  and its partial audio deleted. This means no silent gaps (D27). The loop
+  moves on to the next chapter.
+
+  8. Progress updates while this runs
+  Every event (chunk done, chapter started, ready or failed) calls
+  on_progress(). That calls registry.update(), which, under a lock, updates
+  characters done, the ETA and chapter statuses, and writes job.json. The next
+  poll from the browser picks up the changes.
+
+  9. Finish
+  finish() sets the final status with final_status():
+  - all chapters ready → done
+  - some ready → partial
+  - none ready → failed
+
+  ---
+
+  Part C: Listening and downloading
+
+  10. Playing
+  As soon as a poll shows chapter 1 as ready, the player
+  (hooks/useAudioPlayer.js) loads
+  GET /api/jobs/&lt;id&gt;/chapters/1/audio. FileResponse supports HTTP Range (it
+  answers with 206 Partial Content), so seeking works without downloading the
+  whole file. If the next chapter isn&#x27;t ready yet, the player waits for it, then
+  continues automatically.
+
+  11. Downloading
+  - One chapter: GET /download/{n}.
+  - Whole book: GET /download/full, allowed only when the job is done or
+    partial. full.mp3 is built the first time someone asks for it (ffmpeg joins
+    the chapters with 2 seconds between them), then reused for later requests.
+
+  12. Cleanup
+  CleanupThread (app/jobs/cleanup.py) deletes job folders after 24 hours. On
+  server restart, all of storage/jobs/ is wiped (D18).
+
+  ---
+
+  The whole thing in one line
+
+  Upload → rate limit → size → capacity → save → validate → queue → 202
+    → worker: extract → clean → chapters → normalize + chunk
+    → for each chapter: [attribute + cast] → TTS ×4 parallel → ffmpeg join →
+  ready
+    → done/partial/failed
+  Meanwhile the browser polls every 3 s and plays each chapter as soon as it&#x27;s
+  ready.
+
+  Viva points:
+  - Why answer 202 instead of waiting? Narration takes minutes, and an HTTP
+    request would time out.
+  - Why validate twice? The first check gives instant feedback on bad files. The
+    second is part of the pipeline so it can also be run on its own
+    (scripts/extract.py).
+  - Why chapters in order but chunks in parallel? Order means chapter 1 is ready
+    first. Parallel chunks make each chapter faster.
+  - Why asyncio.to_thread and subprocess.run for ffmpeg? So slow blocking work
+    doesn&#x27;t freeze the event loop, and because asyncio subprocesses have
+    problems on Windows (D20).</pre>
+</details>
+</section>
+<section class="turn" id="turn-5">
+<h2><a href="#turn-5">Turn 5</a><span class="meta">Cooked for 36s · done 5:54 PM</span></h2>
+<div class="label">You</div>
+<pre class="user">how is the text extracted from uploaded document</pre>
+<details>
+<summary>Response <span class="dim">· How text is extracted · 185 lines</span></summary>
+<pre class="resp">  Ran 4 shell commands (ctrl+o to expand)
+
+● How text is extracted
+
+  Code: app/pipeline/extract_pdf.py (PDF, uses PyMuPDF) and
+  app/pipeline/extract_docx.py (Word, uses python-docx).
+
+  Key idea: we don&#x27;t extract plain text only. Every line comes out with
+  information about how it looks, because later steps need that to find chapters
+  and remove junk. Each line becomes a TextLine (app/models.py):
+
+  ┌──────────────┬─────────────────────────────────┬─────────────────────────┐
+  │    Field     │             Meaning             │     Used later for      │
+  ├──────────────┼─────────────────────────────────┼─────────────────────────┤
+  │ text         │ the words                       │ narration               │
+  ├──────────────┼─────────────────────────────────┼─────────────────────────┤
+  │ font_size    │ most common font size in the    │ headings are bigger     │
+  │              │ line                            │                         │
+  ├──────────────┼─────────────────────────────────┼─────────────────────────┤
+  │ bold         │ is the whole line bold?         │ headings are often bold │
+  ├──────────────┼─────────────────────────────────┼─────────────────────────┤
+  │ page, bbox   │ page number and position box    │ headers, footers, page  │
+  │              │ (x0, y0, x1, y1), PDF only      │ numbers, footnotes      │
+  ├──────────────┼─────────────────────────────────┼─────────────────────────┤
+  │ style        │ Word style name such as         │ chapter detection       │
+  │              │ &quot;Heading 1&quot;, DOCX only          │                         │
+  ├──────────────┼─────────────────────────────────┼─────────────────────────┤
+  │ block_id     │ which paragraph/block it        │ rebuilding paragraphs   │
+  │              │ belongs to                      │                         │
+  ├──────────────┼─────────────────────────────────┼─────────────────────────┤
+  │ is_math_font │ mostly set in a math font?      │ removing equations      │
+  ├──────────────┼─────────────────────────────────┼─────────────────────────┤
+  │ font         │ font name                       │ recognising running     │
+  │              │                                 │ headers                 │
+  └──────────────┴─────────────────────────────────┴─────────────────────────┘
+
+  ---
+
+  Before extraction: validation decides which pages to read
+
+  In validate.py, for a PDF:
+  - each page with fewer than 30 non-space characters is checked:
+    - if it has an image, it&#x27;s an image-only (scanned) page: skipped, with a
+      warning to the user;
+    - otherwise it&#x27;s a blank page: skipped silently;
+  - if more than 50% of the non-blank pages are image-only, the whole file is
+    rejected as SCANNED_PDF (we don&#x27;t do OCR).
+
+  The skipped pages are passed to the extractor as skip_pages.
+
+  ---
+
+  PDF extraction (extract_pdf)
+
+  Why PDFs are hard: a PDF doesn&#x27;t store &quot;paragraphs&quot; or &quot;chapters&quot;. It only
+  stores pieces of text placed at x/y positions on a page. We have to rebuild
+  the reading order ourselves.
+
+  For each page (not in skip_pages):
+
+  1. Find and skip tables (_table_rects)
+  - First a quick check, _has_cell_edges: does the page have both horizontal and
+    vertical drawn lines?
+  - Only if it does, PyMuPDF&#x27;s slower find_tables() runs, and any text inside a
+    found table is dropped.
+  - Tables without drawn lines are caught later in step 4.
+
+  2. Get the raw text with styles
+  page.get_text(&quot;dict&quot;) returns a tree:
+  page → blocks → lines → spans
+  A span is a run of text with one font, size and style (bold, superscript, …).
+  Image blocks are ignored.
+
+  3. Turn each line into a &quot;piece&quot; (_piece_from_line)
+  - Rotated text is skipped, e.g. sideways axis labels or margin notes
+    (MAX_LINE_DIR_Y).
+  - Footnote markers are removed: superscript spans made only of 0-9 * † ‡ § ¶.
+    A superscript right after a math symbol is kept, because it&#x27;s an exponent
+    (as in P⁻¹).
+  - For each line it counts, character by character, the most common font size,
+    the most common font, how many characters are bold, and how many are in a
+    math font (CMMI, CMSY, MATH, SYMBOL, …).
+
+  4. Group pieces into visual lines (_visual_lines)
+  PyMuPDF sometimes splits one printed line into several pieces. Pieces whose
+  vertical centres are close (within half the line height) are joined into one
+  line and sorted left to right.
+
+  If every line in a block has 3 or more separate pieces, that block is treated
+  as a table without drawn lines and skipped.
+
+  5. Make TextLines (_row_to_line)
+  - bold = True only if every character is bold.
+  - is_math_font = True if at least 50% of the letters are in math fonts.
+
+  6. Reading order, including two-column pages (order_blocks)
+
+  This is the clever part. Each block is classified:
+  - full-width: wider than 60% of the text area, or crossing the centre line
+    (titles, centred author lines);
+  - left column: centre on the left half;
+  - right column: centre on the right half.
+
+  The page is treated as two-column only if it has at least 3 left blocks, at
+  least 3 right blocks, and those column blocks hold at least 50% of the page&#x27;s
+  characters.
+
+  - Single column: blocks are read top to bottom.
+  - Two columns: full-width blocks split the page into bands. In each band, the
+    whole left column is read first, then the right column, then the full-width
+    block below it.
+
+  ┌───────────────────────────┐
+  │   TITLE (full width)      │ ← 1
+  ├─────────────┬─────────────┤
+  │ left  ← 2   │ right ← 3   │   band 1
+  ├─────────────┴─────────────┤
+  │   Figure / heading        │ ← 4
+  ├─────────────┬─────────────┤
+  │ left  ← 5   │ right ← 6   │   band 2
+  └─────────────┴─────────────┘
+
+  Without this, a plain extractor would mix left and right columns line by line.
+
+  7. Also returned
+  - outline from doc.get_toc(): the PDF&#x27;s bookmarks (level, title, page). This
+    is the first strategy for chapter detection.
+  - page_count, plus get_page_heights(), which the cleaning step uses to know
+    where the top and bottom of each page are (header and footer zones).
+
+  ---
+
+  DOCX extraction (extract_docx)
+
+  Word files are easier, because they already store paragraphs in order and
+  style names.
+
+  For each paragraph in document.paragraphs:
+  1. Empty paragraphs are skipped.
+  2. Style name is taken (e.g. &quot;Heading 1&quot;, &quot;Title&quot;). This feeds the &quot;Word
+     heading styles&quot; chapter strategy.
+  3. Font size:
+     - Each run (a piece of text with one format) may set its own size.
+     - If it doesn&#x27;t, the code walks up the style chain (e.g. Heading 1 → Normal
+       → …) until it finds one (_style_chain).
+     - If nothing sets a size, it uses 11 pt (DEFAULT_FONT_SIZE).
+     - The size used is the one covering the most characters.
+  4. Bold: same idea. Each run&#x27;s bold setting, otherwise the style&#x27;s; bold =
+     True only if every run is bold.
+
+  Not read: tables, footnotes and endnotes. In python-docx these are stored
+  separately from the body paragraphs, so they&#x27;re naturally left out. There are
+  no pages or positions in a DOCX, so page and bbox are empty.
+
+  ---
+
+  What happens next (clean.py)
+
+  The list of TextLines goes to cleaning, which uses the extra information
+  collected above:
+  - the same text near the top or bottom on many pages → running header or
+    footer → removed;
+  - small numbers at the top or bottom → page numbers → removed;
+  - is_math_font lines → equations → removed;
+  - small text at the bottom of the page → footnotes → removed;
+  - lines ending in - → joined with the next line;
+  - lines with the same block_id → merged back into paragraphs.
+
+  ---
+
+  Viva questions to expect
+
+  - Why PyMuPDF? It&#x27;s fast, and it gives fonts, sizes, flags and positions for
+    every span. Plain text extractors lose those.
+  - Why not OCR for scanned PDFs? It&#x27;s out of scope (a project rule). We detect
+    scanned PDFs and reject them with a clear message instead of producing
+    silence.
+  - How do you handle two columns? Blocks are split into left, right and
+    full-width; full-width blocks divide the page into bands; inside each band
+    the left column is read before the right.
+  - How do you detect equations? By font name (TeX math fonts such as CMMI and
+    CMSY), measured over letters only so equation numbers like &quot;(4.1)&quot; don&#x27;t
+    count.
+  - Limitation: unusual layouts (three columns, sidebars, text wrapped around
+    pictures) can still come out in the wrong order.</pre>
+</details>
+</section>
+</main>
+</div>
+<script>
+const all = () => document.querySelectorAll("details");
+document.getElementById("expand").onclick = () => all().forEach(d => d.open = true);
+document.getElementById("collapse").onclick = () => all().forEach(d => d.open = false);
+function openHash() {
+  const t = location.hash && document.querySelector(location.hash);
+  if (t) t.querySelector("details").open = true;
+}
+window.addEventListener("hashchange", openHash);
+openHash();
+</script>
+</body>
+</html>
